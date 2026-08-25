@@ -200,11 +200,40 @@ function renderTopBar(){
 }
 
 /* ---------- מסך הגדרות קול ---------- */
+function unlockAllLevels(){
+  var p = currentProfile();
+  if(!p) return;
+  CONTENT.worlds.forEach(function(w){
+    w.modules.forEach(function(m){
+      m.levels.forEach(function(lv){
+        setProgress(progressKey(w.id, m.id, lv.id), { stars:3, gameDone:true });
+      });
+    });
+  });
+}
+
 function screenSettings(){
   var wrap = E('div',{},[]);
   var back = VIEW.back || {screen:'profiles'};
-  wrap.appendChild(crumbs([{label:'בַּיִת', onclick:function(){ nav(back); }}, {label:'הַגְדָּרוֹת קוֹל'}]));
-  wrap.appendChild(E('h1',{class:'page-title'},['⚙️ הַגְדָּרוֹת קוֹל']));
+  wrap.appendChild(crumbs([{label:'בַּיִת', onclick:function(){ nav(back); }}, {label:'הַגְדָּרוֹת'}]));
+  wrap.appendChild(E('h1',{class:'page-title'},['⚙️ הַגְדָּרוֹת']));
+
+  var p0 = currentProfile();
+  var unlockSection = E('div',{},[E('h2',{class:'section-title'},['רָמוֹת'])]);
+  if(p0){
+    unlockSection.appendChild(E('div',{class:'feedback', style:'text-align:right;font-weight:400;font-size:14px;'},[
+      'פּוֹתֵחַ אֶת כָּל הָרָמוֹת בְּכָל הַנּוֹשְׂאִים עֲבוּר "'+p0.name+'", לְצוֹרֶךְ עִיּוּן וְצְפִיָּה חָפְשִׁית (בְּלִי הַצֹּרֶךְ לְסַיֵּם כָּל רָמָה כְּדֵי לַעֲבֹר לַבָּאָה).'
+    ]));
+    unlockSection.appendChild(E('button',{class:'big-btn', onclick:function(){
+      unlockAllLevels();
+      nav(Object.assign({},VIEW));
+    }},['🔓 פְּתַח אֶת כָּל הָרָמוֹת']));
+  } else {
+    unlockSection.appendChild(E('div',{class:'feedback'},['בְּחַרְ/י אוֹ צוֹר/י פּרוֹפִיל קֹדֶם כְּדֵי לִפְתֹּחַ רָמוֹת.']));
+  }
+  wrap.appendChild(unlockSection);
+
+  wrap.appendChild(E('h2',{class:'section-title'},['⚙️ הַגְדָּרוֹת קוֹל']));
 
   if(!SPEECH.isSupported()){
     wrap.appendChild(E('div',{class:'lesson-card'},['הַדְּפַדְפָן הַזֶּה לֹא תּוֹמֵךְ בְּהַקְרָאָה קוֹלִית. הָאַתָּר יַמְשִׁיךְ לַעֲבוֹד מְצֻיָּן גַּם בְּלִי קוֹל.']));
