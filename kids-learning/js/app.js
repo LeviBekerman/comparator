@@ -53,12 +53,18 @@ var STORE_KEY = 'kids-learning-state-v1';
 function loadState(){
   try{
     var raw = localStorage.getItem(STORE_KEY);
-    if(raw) return JSON.parse(raw);
+    if(raw){
+      var s = JSON.parse(raw);
+      if(!s.voicePrefs) s.voicePrefs = { he:null, en:null };
+      return s;
+    }
   }catch(e){}
-  return { profiles: [], currentId: null };
+  return { profiles: [], currentId: null, voicePrefs: { he:null, en:null } };
 }
 function saveState(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(STATE)); }catch(e){} }
 var STATE = loadState();
+SPEECH.setPreferred('he', STATE.voicePrefs.he);
+SPEECH.setPreferred('en', STATE.voicePrefs.en);
 
 function currentProfile(){
   return STATE.profiles.find(function(p){ return p.id === STATE.currentId; }) || null;
@@ -118,6 +124,9 @@ function getPracticeQuestion(level){
     var poolSrc = level.items.map(function(i){return t==='engnum'?i.w:i.w;}).filter(function(w){return w!==item.w;});
     var pool = shuffle(poolSrc).slice(0,3);
     var choices = shuffle([item.w].concat(pool)).map(function(w){ return {label:w, value:w}; });
+    if(t==='engnum'){
+      return { emoji:null, qMain:starsNode(item.n), qText:'How many is this?', choices:choices, correct:item.w, speak:item.w, lang:'en' };
+    }
     return { emoji:item.e, qMain:null, qText:'What is this?', choices:choices, correct:item.w, speak:item.w, lang:'en' };
   }
   if(t === 'engsent'){
@@ -143,7 +152,8 @@ function getMatchItems(level){
     else if(t==='numbers'){ a={main:String(item.n)}; b={emoji:starsNode(item.n)}; }
     else if(t==='nikud'){ a={main:item.demo}; b={main:SOUND_LABEL[item.sound]}; }
     else if(t==='eng'){ a={main:item.l}; b={emoji:item.e, sub:item.w}; }
-    else if(t==='engword'||t==='engnum'){ a={main:item.w}; b={emoji:item.e}; }
+    else if(t==='engword'){ a={main:item.w}; b={emoji:item.e}; }
+    else if(t==='engnum'){ a={main:item.w}; b={emoji:starsNode(item.n)}; }
     else if(t==='engsent'){ a={emoji:item.e}; b={main:item.s, small:true}; }
     else { a={main:'?'}; b={main:'?'}; }
     return { id:'p'+idx, a:a, b:b };
@@ -167,6 +177,7 @@ function render(){
   else if(VIEW.screen==='practice') body.appendChild(screenPractice());
   else if(VIEW.screen==='game') body.appendChild(screenGame());
   else if(VIEW.screen==='result') body.appendChild(screenResult());
+  else if(VIEW.screen==='settings') body.appendChild(screenSettings());
 
   app.appendChild(E('div',{class:'footer-note'},['פועל לגמרי במכשיר שלכם — ללא צורך בחיבור לאינטרנט 💙']));
 }
@@ -174,14 +185,62 @@ function render(){
 function renderTopBar(){
   var bar = E('div',{class:'top-bar'},[]);
   bar.appendChild(E('div',{class:'brand'},[E('span',{class:'logo'},['🎓']),'עוֹלָם הַלְּמִידָה']));
+  var right = E('div',{style:'display:flex;align-items:center;gap:8px;'},[]);
+  right.appendChild(E('button',{class:'profile-chip', title:'קול הקראה', onclick:function(){ nav(Object.assign({},VIEW,{screen:'settings', back:VIEW}));  }},['⚙️']));
   var p = currentProfile();
   if(p){
-    var chip = E('button',{class:'profile-chip', onclick:function(){ nav({screen:'profiles'}); }},[
+    right.appendChild(E('button',{class:'profile-chip', onclick:function(){ nav({screen:'profiles'}); }},[
       E('span',{class:'av'},[p.avatar]), p.name
-    ]);
-    bar.appendChild(chip);
+    ]));
   }
+  bar.appendChild(right);
   return bar;
+}
+
+/* ---------- מסך הגדרות קול ---------- */
+function screenSettings(){
+  var wrap = E('div',{},[]);
+  var back = VIEW.back || {screen:'profiles'};
+  wrap.appendChild(crumbs([{label:'בַּיִת', onclick:function(){ nav(back); }}, {label:'הַגְדָּרוֹת קוֹל'}]));
+  wrap.appendChild(E('h1',{class:'page-title'},['⚙️ הַגְדָּרוֹת קוֹל']));
+
+  if(!SPEECH.isSupported()){
+    wrap.appendChild(E('div',{class:'lesson-card'},['הַדְּפַדְפָן הַזֶּה לֹא תּוֹמֵךְ בְּהַקְרָאָה קוֹלִית. הָאַתָּר יַמְשִׁיךְ לַעֲבוֹד מְצֻיָּן גַּם בְּלִי קוֹל.']));
+    wrap.appendChild(E('button',{class:'big-btn ghost', onclick:function(){ nav(back); }},['חֲזָרָה']));
+    return wrap;
+  }
+
+  function voiceRow(langKey, langLabel){
+    var section = E('div',{},[E('h2',{class:'section-title'},[langLabel]) ]);
+    var list = SPEECH.voicesFor(langKey);
+    if(!list.length){
+      section.appendChild(E('div',{class:'feedback'},['לֹא נִמְצָא קוֹל מֻתְקָן לְשָׂפָה זוֹ בַּמַּכְשִׁיר. אֶפְשָׁר לְהוֹסִיף קוֹל בְּהַגְדָּרוֹת הַנְּגִישׁוּת שֶׁל הַמַּכְשִׁיר.']));
+      return section;
+    }
+    var grid = E('div',{class:'profiles-grid'},[]);
+    list.forEach(function(v){
+      var isSel = STATE.voicePrefs[langKey] ? STATE.voicePrefs[langKey]===v.voiceURI : list[0].voiceURI===v.voiceURI;
+      var card = E('button',{class:'card', style: isSel?'border:3px solid var(--accent);':'', onclick:function(){
+        STATE.voicePrefs[langKey] = v.voiceURI; saveState();
+        SPEECH.setPreferred(langKey, v.voiceURI);
+        SPEECH.speak(langKey==='he' ? 'שָׁלוֹם, כָּכָה אֲנִי נִשְׁמַעַת' : 'Hello, this is how I sound', langKey);
+        nav(Object.assign({},VIEW));
+      }},[
+        E('div',{class:'icon'},[isSel?'✅':'🔊']),
+        E('div',{class:'title', style:'font-size:15px;'},[v.name]),
+        E('div',{class:'desc'},[v.lang + (v.localService? ' · מְקוֹמִי':' · דּוֹרֵשׁ אִינְטֶרְנֶט')])
+      ]);
+      grid.appendChild(card);
+    });
+    section.appendChild(grid);
+    return section;
+  }
+
+  wrap.appendChild(E('div',{class:'feedback', style:'text-align:right;font-weight:400;font-size:14px;'},['בּוֹחֲרִים אֶת הַקּוֹל הֲכִי טִבְעִי שֶׁמֻּתְקָן בַּמַּכְשִׁיר שֶׁלָּכֶם. קוֹלוֹת "מְקוֹמִיִּים" עוֹבְדִים גַּם בְּלִי אִינְטֶרְנֶט.']));
+  wrap.appendChild(voiceRow('he','🇮🇱 עִבְרִית'));
+  wrap.appendChild(voiceRow('en','🇬🇧 English'));
+  wrap.appendChild(E('button',{class:'big-btn ghost', onclick:function(){ nav(back); }},['חֲזָרָה']));
+  return wrap;
 }
 
 function crumbs(items){
@@ -316,7 +375,9 @@ function screenLevels(){
   return wrap;
 }
 
-/* ---------- מסך שיעור (וידאו קצר מדומה + שמע) ---------- */
+/* ---------- מסך שיעור (וידאו קצר מונחה קול, מתקדם אוטומטית) ---------- */
+var LESSON_TOKEN = 0;
+var LESSON_PLAYING = true;
 function screenLesson(){
   var world = findWorld(VIEW.worldId), mod = findModule(world, VIEW.moduleId), lv = findLevel(mod, VIEW.levelId);
   var wrap = E('div',{},[]);
@@ -330,6 +391,10 @@ function screenLesson(){
   var steps = buildLessonSteps(lv);
   var i = VIEW.step || 0;
   var step = steps[i];
+  var isLast = i === steps.length-1;
+
+  LESSON_TOKEN++;
+  var myToken = LESSON_TOKEN;
 
   var card = E('div',{class:'lesson-card', dir: step.lang==='en' ? 'ltr' : 'rtl'},[]);
   if(step.emoji) card.appendChild(E('div',{class:'lesson-emoji'},[step.emoji]));
@@ -337,8 +402,19 @@ function screenLesson(){
   if(step.sub) card.appendChild(E('div',{class:'lesson-sub', dir: step.subLang==='he' ? 'rtl' : null},[step.sub]));
   if(step.extra) card.appendChild(E('div',{class:'lesson-he', dir:'rtl'},[step.extra]));
 
-  var speakBtn = E('button',{class:'speak-btn', title:'הַשְׁמַע', onclick:function(){ SPEECH.speak(step.speak, step.lang); }},['🔊']);
-  card.appendChild(speakBtn);
+  var timebar = E('div',{class:'lesson-timebar'},[E('div',{class:'lesson-timebar-fill'},[])]);
+  card.appendChild(timebar);
+
+  var btnRow = E('div',{style:'display:flex;gap:10px;'},[]);
+  var playBtn = E('button',{class:'speak-btn', title: LESSON_PLAYING ? 'הַשְׁהֵה' : 'הַמְשֵׁךְ', onclick:function(){
+    LESSON_PLAYING = !LESSON_PLAYING;
+    SPEECH.stop();
+    nav(Object.assign({},VIEW));
+  }},[LESSON_PLAYING ? '⏸️' : '▶️']);
+  var speakBtn = E('button',{class:'speak-btn', title:'הַשְׁמַע שׁוּב', onclick:function(){ SPEECH.speak(step.speak, step.lang); }},['🔊']);
+  btnRow.appendChild(playBtn);
+  btnRow.appendChild(speakBtn);
+  card.appendChild(btnRow);
   wrap.appendChild(card);
 
   var dots = E('div',{class:'dots'},[]);
@@ -346,14 +422,26 @@ function screenLesson(){
   wrap.appendChild(dots);
 
   var navRow = E('div',{class:'nav-row'},[
-    E('button',{class:'big-btn ghost', disabled: i===0?'disabled':null, onclick:function(){ nav(Object.assign({},VIEW,{step:i-1})); }},['⟵ הַקּוֹדֵם']),
-    i < steps.length-1
+    E('button',{class:'big-btn ghost', disabled: i===0?'disabled':null, onclick:function(){ LESSON_PLAYING=false; nav(Object.assign({},VIEW,{step:i-1})); }},['⟵ הַקּוֹדֵם']),
+    !isLast
       ? E('button',{class:'big-btn', onclick:function(){ nav(Object.assign({},VIEW,{step:i+1})); }},['הַבָּא ⟶'])
       : E('button',{class:'big-btn good', onclick:function(){ nav({screen:'practice', worldId:world.id, moduleId:mod.id, levelId:lv.id}); }},['לְתַרְגּוּל! ✏️'])
   ]);
   wrap.appendChild(navRow);
 
-  setTimeout(function(){ if(step.speak) SPEECH.speak(step.speak, step.lang); }, 300);
+  var fillEl = timebar.firstChild;
+  if(LESSON_PLAYING){
+    var dur = SPEECH.estimateDuration(step.speak);
+    fillEl.style.transitionDuration = dur+'ms';
+    requestAnimationFrame(function(){ requestAnimationFrame(function(){ if(myToken===LESSON_TOKEN) fillEl.style.width='100%'; }); });
+    SPEECH.speak(step.speak, step.lang, function(){
+      if(myToken !== LESSON_TOKEN || !LESSON_PLAYING) return;
+      if(!isLast){ nav(Object.assign({},VIEW,{step:i+1})); }
+    });
+  } else {
+    fillEl.style.width = '0%';
+  }
+
   return wrap;
 }
 
@@ -371,8 +459,11 @@ function buildLessonSteps(lv){
   if(t==='eng'){
     return lv.items.map(function(it){ return { emoji:it.e, main:it.l, sub:it.w, speak:it.l+'. '+it.w, lang:'en' }; });
   }
-  if(t==='engword'||t==='engnum'){
+  if(t==='engword'){
     return lv.items.map(function(it){ return { emoji:it.e, main:it.w, sub:it.he||'', subLang:'he', speak:it.w, lang:'en' }; });
+  }
+  if(t==='engnum'){
+    return lv.items.map(function(it){ return { emoji:null, main:it.w, sub:starsNode(it.n), speak:it.w, lang:'en' }; });
   }
   if(t==='engsent'){
     return lv.items.map(function(it){ return { emoji:it.e, main:it.s, speak:it.s, lang:'en' }; });

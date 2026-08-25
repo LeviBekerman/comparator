@@ -76,7 +76,7 @@ h2.section-title{ font-size:20px; margin: 22px 0 12px; color: var(--ink-soft); }
   padding: 40px 24px; text-align:center; min-height: 340px;
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px;
 }
-.lesson-emoji{ font-size:96px; filter:drop-shadow(0 6px 10px rgba(0,0,0,.15)); animation: pop .4s ease; }
+.lesson-emoji{ font-size:96px; filter:drop-shadow(0 6px 10px rgba(0,0,0,.15)); animation: pop .4s ease; max-width:100%; overflow-wrap:anywhere; word-break:break-word; }
 .lesson-main{ font-size:56px; font-weight:900; max-width:100%; overflow-wrap:anywhere; word-break:break-word; }
 .lesson-sub{ font-size:26px; color:var(--ink-soft); font-weight:700; max-width:100%; overflow-wrap:anywhere; word-break:break-word; }
 .lesson-en{ font-size:44px; font-weight:900; }
@@ -84,6 +84,9 @@ h2.section-title{ font-size:20px; margin: 22px 0 12px; color: var(--ink-soft); }
 
 .dots-wrap{ display:flex; flex-wrap:wrap; justify-content:center; align-content:center; gap:3px; max-width:100%; }
 .dot-star{ font-size:24px; line-height:1; }
+
+.lesson-timebar{ width:100%; max-width:260px; height:6px; background:#E9E5F5; border-radius:999px; overflow:hidden; margin-top:4px; }
+.lesson-timebar-fill{ height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--good)); transition-property:width; transition-timing-function:linear; }
 @keyframes pop{ 0%{ transform:scale(.5); opacity:0;} 70%{ transform:scale(1.12);} 100%{ transform:scale(1); opacity:1;} }
 
 .dots{ display:flex; gap:6px; justify-content:center; margin-top:8px; }
@@ -98,7 +101,7 @@ h2.section-title{ font-size:20px; margin: 22px 0 12px; color: var(--ink-soft); }
 .quiz-progress{ height:10px; background:#E9E5F5; border-radius:999px; overflow:hidden; }
 .quiz-progress > div{ height:100%; background: linear-gradient(90deg,var(--accent),var(--good)); transition: width .3s ease; }
 .quiz-question{ text-align:center; }
-.quiz-question .q-emoji{ font-size:70px; }
+.quiz-question .q-emoji{ font-size:70px; max-width:100%; overflow-wrap:anywhere; word-break:break-word; }
 .quiz-question .q-main{ font-size:38px; font-weight:900; margin-top:6px; max-width:100%; overflow-wrap:anywhere; word-break:break-word; }
 .quiz-question .q-text{ font-size:22px; font-weight:700; line-height:1.5; max-width:100%; overflow-wrap:anywhere; word-break:break-word; }
 .choices{ display:grid; grid-template-columns: repeat(2, 1fr); gap:14px; min-width:0; }
