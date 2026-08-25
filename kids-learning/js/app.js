@@ -138,7 +138,7 @@ function getPracticeQuestion(level){
   if(t === 'math' || t === 'mathword'){
     var q = level.gen();
     var choices = q.choices.map(function(v){ return {label:String(v), value:v}; });
-    return { emoji:q.emoji||'🧮', qMain:null, qText:q.text, choices:choices, correct:q.answer, speak:null, lang:'he' };
+    return { emoji:q.emoji||'🧮', qMain:null, qText:q.text, qTextDir: t==='math' ? 'ltr' : null, choices:choices, correct:q.answer, speak:null, lang:'he' };
   }
   return { emoji:'❓', qText:'?', choices:[], correct:null };
 }
@@ -392,28 +392,45 @@ function screenLesson(){
   var i = VIEW.step || 0;
   var step = steps[i];
   var isLast = i === steps.length-1;
+  var isDemo = step.kind === 'mathdemo';
 
   LESSON_TOKEN++;
   var myToken = LESSON_TOKEN;
 
-  var card = E('div',{class:'lesson-card', dir: step.lang==='en' ? 'ltr' : 'rtl'},[]);
-  if(step.emoji) card.appendChild(E('div',{class:'lesson-emoji'},[step.emoji]));
-  if(step.main) card.appendChild(E('div',{class:'lesson-main'},[step.main]));
-  if(step.sub) card.appendChild(E('div',{class:'lesson-sub', dir: step.subLang==='he' ? 'rtl' : null},[step.sub]));
-  if(step.extra) card.appendChild(E('div',{class:'lesson-he', dir:'rtl'},[step.extra]));
+  var card = E('div',{class:'lesson-card', dir: (!isDemo && step.lang==='en') ? 'ltr' : 'rtl'},[]);
+  var stageWrap = null, timebar = null;
 
-  var timebar = E('div',{class:'lesson-timebar'},[E('div',{class:'lesson-timebar-fill'},[])]);
-  card.appendChild(timebar);
+  if(isDemo){
+    stageWrap = E('div',{class:'math-scene'},[
+      E('div',{class:'math-stage'},[]),
+      E('div',{class:'math-caption'},[])
+    ]);
+    card.appendChild(stageWrap);
+  } else {
+    if(step.emoji) card.appendChild(E('div',{class:'lesson-emoji'},[step.emoji]));
+    if(step.main) card.appendChild(E('div',{class:'lesson-main'},[step.main]));
+    if(step.sub) card.appendChild(E('div',{class:'lesson-sub', dir: step.subLang==='he' ? 'rtl' : null},[step.sub]));
+    if(step.extra) card.appendChild(E('div',{class:'lesson-he', dir:'rtl'},[step.extra]));
+    timebar = E('div',{class:'lesson-timebar'},[E('div',{class:'lesson-timebar-fill'},[])]);
+    card.appendChild(timebar);
+  }
 
-  var btnRow = E('div',{style:'display:flex;gap:10px;'},[]);
   var playBtn = E('button',{class:'speak-btn', title: LESSON_PLAYING ? 'הַשְׁהֵה' : 'הַמְשֵׁךְ', onclick:function(){
     LESSON_PLAYING = !LESSON_PLAYING;
     SPEECH.stop();
-    nav(Object.assign({},VIEW));
+    if(isDemo){
+      playBtn.textContent = LESSON_PLAYING ? '⏸️' : '▶️';
+      playBtn.title = LESSON_PLAYING ? 'הַשְׁהֵה' : 'הַמְשֵׁךְ';
+      if(LESSON_PLAYING && MATH_DEMO_RUNNER) MATH_DEMO_RUNNER.resume();
+    } else {
+      nav(Object.assign({},VIEW));
+    }
   }},[LESSON_PLAYING ? '⏸️' : '▶️']);
-  var speakBtn = E('button',{class:'speak-btn', title:'הַשְׁמַע שׁוּב', onclick:function(){ SPEECH.speak(step.speak, step.lang); }},['🔊']);
-  btnRow.appendChild(playBtn);
-  btnRow.appendChild(speakBtn);
+  var speakBtn = E('button',{class:'speak-btn', title:'הַשְׁמַע שׁוּב', onclick:function(){
+    if(isDemo){ SPEECH.stop(); if(MATH_DEMO_RUNNER) MATH_DEMO_RUNNER.resume(); }
+    else SPEECH.speak(step.speak, step.lang);
+  }},['🔊']);
+  var btnRow = E('div',{style:'display:flex;gap:10px;'},[playBtn, speakBtn]);
   card.appendChild(btnRow);
   wrap.appendChild(card);
 
@@ -429,17 +446,24 @@ function screenLesson(){
   ]);
   wrap.appendChild(navRow);
 
-  var fillEl = timebar.firstChild;
-  if(LESSON_PLAYING){
-    var dur = SPEECH.estimateDuration(step.speak);
-    fillEl.style.transitionDuration = dur+'ms';
-    requestAnimationFrame(function(){ requestAnimationFrame(function(){ if(myToken===LESSON_TOKEN) fillEl.style.width='100%'; }); });
-    SPEECH.speak(step.speak, step.lang, function(){
+  if(isDemo){
+    driveMathDemo(stageWrap, step.spec, myToken, function(){
       if(myToken !== LESSON_TOKEN || !LESSON_PLAYING) return;
       if(!isLast){ nav(Object.assign({},VIEW,{step:i+1})); }
     });
   } else {
-    fillEl.style.width = '0%';
+    var fillEl = timebar.firstChild;
+    if(LESSON_PLAYING){
+      var dur = SPEECH.estimateDuration(step.speak);
+      fillEl.style.transitionDuration = dur+'ms';
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){ if(myToken===LESSON_TOKEN) fillEl.style.width='100%'; }); });
+      SPEECH.speak(step.speak, step.lang, function(){
+        if(myToken !== LESSON_TOKEN || !LESSON_PLAYING) return;
+        if(!isLast){ nav(Object.assign({},VIEW,{step:i+1})); }
+      });
+    } else {
+      fillEl.style.width = '0%';
+    }
   }
 
   return wrap;
@@ -469,14 +493,135 @@ function buildLessonSteps(lv){
     return lv.items.map(function(it){ return { emoji:it.e, main:it.s, speak:it.s, lang:'en' }; });
   }
   if(t==='math' || t==='mathword'){
-    var out=[];
-    for(var i=0;i<4;i++){
-      var q = lv.gen();
-      out.push({ emoji:q.emoji||'🧮', main:q.text, sub:'= '+q.answer, speak:(q.text.replace('?', ''))+' זֶה '+q.answer, lang:'he' });
+    var examples;
+    if(lv.kind === 'word'){
+      examples = WORD_STORIES.map(function(story){
+        var x=story.demo.x, y=story.demo.y, answer=opAnswer(story.op,x,y);
+        return { op:story.op, a:x, b:y, answer:answer, emoji:story.emoji,
+          narrate:{ setup:story.setup(x), change:story.change(y), result:'הַתְּשׁוּבָה הִיא '+answer+'!' } };
+      });
+    } else {
+      examples = (MATH_DEMO_EXAMPLES[lv.kind]||[]).map(function(ex){
+        var answer = opAnswer(lv.kind, ex.a, ex.b);
+        return { op:lv.kind, a:ex.a, b:ex.b, answer:answer, emoji:'🍬', narrate: mathNarrate(lv.kind, ex.a, ex.b, answer) };
+      });
     }
-    return out;
+    return examples.map(function(spec){ return { kind:'mathdemo', spec:spec, lang:'he' }; });
   }
   return [{ main:'?', speak:'' }];
+}
+
+function mathNarrate(op,a,b,answer){
+  if(op==='add') return { setup:'יֵשׁ לָנוּ '+a+' סֻכָּרִיּוֹת', change:'וְעוֹד '+b+' סֻכָּרִיּוֹת', result:a+' וְעוֹד '+b+' זֶה '+answer+'!' };
+  if(op==='sub') return { setup:'יֵשׁ לָנוּ '+a+' סֻכָּרִיּוֹת', change:'וְנוֹתְנִים '+b+' מֵהֶן', result:a+' פָּחוֹת '+b+' זֶה '+answer+'!' };
+  if(op==='mul') return { setup:'יֵשׁ לָנוּ '+a+' קְבוּצוֹת', change:'וּבְכָל קְבוּצָה '+b+' סֻכָּרִיּוֹת', result:a+' כָּפוּל '+b+' זֶה '+answer+'!' };
+  return { setup:'יֵשׁ לָנוּ '+a+' סֻכָּרִיּוֹת', change:'מְחַלְּקִים אוֹתָן שָׁוֶה בְּשָׁוֶה לְ-'+b+' קְבוּצוֹת', result:a+' חָלֵק לְ-'+b+' זֶה '+answer+'!' };
+}
+
+function demoItemsRow(container, count, emoji, extraClass){
+  var row = E('div',{class:'math-row'},[]);
+  for(var i=0;i<count;i++){
+    var it = E('span',{class:'math-item'+(extraClass?(' '+extraClass):'')},[emoji]);
+    it.style.animationDelay = (i*0.06)+'s';
+    row.appendChild(it);
+  }
+  container.appendChild(row);
+  return row;
+}
+function demoGroupBox(container, count, emoji){
+  var g = E('div',{class:'math-group'},[]);
+  for(var i=0;i<count;i++){
+    var it = E('span',{class:'math-item'},[emoji]);
+    it.style.animationDelay = (i*0.06)+'s';
+    g.appendChild(it);
+  }
+  container.appendChild(g);
+  return g;
+}
+
+function buildDemoPhases(spec){
+  var op=spec.op, a=spec.a, b=spec.b, answer=spec.answer, emoji=spec.emoji||'🍬', n=spec.narrate;
+  var phases = [];
+  if(op==='add'){
+    phases.push({ text:n.setup, render:function(stage){ demoItemsRow(stage, a, emoji); } });
+    phases.push({ text:n.change, render:function(stage){
+      demoItemsRow(stage, a, emoji);
+      stage.appendChild(E('span',{class:'math-plus'},['+']));
+      demoItemsRow(stage, b, emoji);
+    }});
+    phases.push({ text:n.result, render:function(stage){
+      stage.appendChild(E('div',{class:'math-equation', dir:'ltr'},[a+' + '+b+' = '+answer]));
+      demoItemsRow(stage, answer, emoji);
+    }});
+  } else if(op==='sub'){
+    phases.push({ text:n.setup, render:function(stage){ demoItemsRow(stage, a, emoji); } });
+    phases.push({ text:n.change, render:function(stage){
+      var row = demoItemsRow(stage, a, emoji);
+      for(var i=a-b;i<a;i++){ row.children[i].classList.add('faded'); }
+    }});
+    phases.push({ text:n.result, render:function(stage){
+      stage.appendChild(E('div',{class:'math-equation', dir:'ltr'},[a+' − '+b+' = '+answer]));
+      demoItemsRow(stage, answer, emoji);
+    }});
+  } else if(op==='mul'){
+    phases.push({ text:n.setup, render:function(stage){
+      var row = E('div',{class:'math-groups-row'},[]);
+      for(var i=0;i<a;i++){ row.appendChild(E('div',{class:'math-group'},[])); }
+      stage.appendChild(row);
+    }});
+    phases.push({ text:n.change, render:function(stage){
+      var row = E('div',{class:'math-groups-row'},[]);
+      for(var i=0;i<a;i++){ demoGroupBox(row, b, emoji); }
+      stage.appendChild(row);
+    }});
+    phases.push({ text:n.result, render:function(stage){
+      stage.appendChild(E('div',{class:'math-equation', dir:'ltr'},[a+' × '+b+' = '+answer]));
+      var row = E('div',{class:'math-groups-row'},[]);
+      for(var i=0;i<a;i++){ demoGroupBox(row, b, emoji); }
+      stage.appendChild(row);
+    }});
+  } else if(op==='div'){
+    phases.push({ text:n.setup, render:function(stage){ demoItemsRow(stage, a, emoji); } });
+    phases.push({ text:n.change, render:function(stage){
+      var row = E('div',{class:'math-groups-row'},[]);
+      for(var i=0;i<b;i++){ row.appendChild(E('div',{class:'math-group'},[])); }
+      stage.appendChild(row);
+    }});
+    phases.push({ text:n.result, render:function(stage){
+      stage.appendChild(E('div',{class:'math-equation', dir:'ltr'},[a+' ÷ '+b+' = '+answer]));
+      var row = E('div',{class:'math-groups-row'},[]);
+      for(var i=0;i<b;i++){ demoGroupBox(row, answer, emoji); }
+      stage.appendChild(row);
+    }});
+  }
+  return phases;
+}
+
+var MATH_DEMO_RUNNER = null;
+function driveMathDemo(stageWrap, spec, token, onComplete){
+  var phases = buildDemoPhases(spec);
+  var idx = 0;
+  var stageEl = stageWrap.querySelector('.math-stage');
+  var captionEl = stageWrap.querySelector('.math-caption');
+
+  function showPhase(n){
+    if(token !== LESSON_TOKEN) return;
+    if(n >= phases.length){ if(onComplete) onComplete(); return; }
+    idx = n;
+    var ph = phases[n];
+    stageEl.innerHTML = '';
+    ph.render(stageEl);
+    captionEl.textContent = ph.text;
+    if(LESSON_PLAYING){
+      SPEECH.speak(ph.text, 'he', function(){
+        if(token!==LESSON_TOKEN || !LESSON_PLAYING) return;
+        setTimeout(function(){ if(token===LESSON_TOKEN && LESSON_PLAYING) showPhase(idx+1); }, 300);
+      });
+    }
+  }
+
+  MATH_DEMO_RUNNER = { resume:function(){ showPhase(idx); } };
+  showPhase(0);
 }
 
 /* ---------- מסך תרגול ---------- */
@@ -525,7 +670,7 @@ function screenPractice(){
   var qBox = E('div',{class:'quiz-question', dir: q.lang==='en' ? 'ltr' : 'rtl'},[]);
   if(q.emoji) qBox.appendChild(E('div',{class:'q-emoji'},[q.emoji]));
   if(q.qMain) qBox.appendChild(E('div',{class:'q-main'},[q.qMain]));
-  qBox.appendChild(E('div',{class:'q-text'},[q.qText]));
+  qBox.appendChild(E('div',{class:'q-text', dir:q.qTextDir||null},[q.qText]));
   wrap.appendChild(qBox);
 
   var feedback = E('div',{class:'feedback'},[]);
@@ -671,7 +816,7 @@ function gameSpeedquiz(world,mod,lv){
   var qBox = E('div',{class:'quiz-question', dir: q.lang==='en' ? 'ltr' : 'rtl'},[]);
   if(q.emoji) qBox.appendChild(E('div',{class:'q-emoji'},[q.emoji]));
   if(q.qMain) qBox.appendChild(E('div',{class:'q-main'},[q.qMain]));
-  qBox.appendChild(E('div',{class:'q-text'},[q.qText]));
+  qBox.appendChild(E('div',{class:'q-text', dir:q.qTextDir||null},[q.qText]));
   wrap.appendChild(qBox);
 
   var feedback = E('div',{class:'feedback'},[]);

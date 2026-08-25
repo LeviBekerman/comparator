@@ -69,6 +69,39 @@ function choicesAround(correct, min, max, count){
   return shuffle(set);
 }
 
+function opAnswer(op,a,b){ return op==='add'?a+b : op==='sub'?a-b : op==='mul'?a*b : Math.round(a/b); }
+
+var WORD_STORIES = [
+  { op:'add', emoji:'🍎',
+    setup:function(x){ return 'לְדָנָה יֵשׁ '+x+' תַּפּוּחִים'; },
+    change:function(y){ return 'וְקִבְּלָה עוֹד '+y+'.'; },
+    question:'כַּמָּה תַּפּוּחִים יֵשׁ לָהּ עַכְשָׁיו?',
+    range:function(){ var x=rnd(2,10), y=rnd(1,Math.max(1,10-x)); return {x:x,y:y}; },
+    demo:{x:2,y:1}
+  },
+  { op:'sub', emoji:'⭐',
+    setup:function(x){ return 'לְיוֹסִי הָיוּ '+x+' מַדְבְּקוֹת'; },
+    change:function(y){ return 'הוּא נָתַן '+y+' לַחֲבֵרוֹ.'; },
+    question:'כַּמָּה נִשְׁאֲרוּ לוֹ?',
+    range:function(){ var x=rnd(5,20), y=rnd(1,x); return {x:x,y:y}; },
+    demo:{x:5,y:2}
+  },
+  { op:'mul', emoji:'✏️',
+    setup:function(x){ return 'בַּכִּתָּה יֵשׁ '+x+' שֻׁלְחָנוֹת'; },
+    change:function(y){ return 'וְעַל כָּל שֻׁלְחָן '+y+' עִפְּרוֹנוֹת.'; },
+    question:'כַּמָּה עִפְּרוֹנוֹת בְּסַךְ הַכֹּל?',
+    range:function(){ var x=rnd(2,6), y=rnd(2,5); return {x:x,y:y}; },
+    demo:{x:2,y:3}
+  }
+];
+
+var MATH_DEMO_EXAMPLES = {
+  add: [{a:2,b:1},{a:3,b:2},{a:4,b:3}],
+  sub: [{a:5,b:2},{a:6,b:3},{a:4,b:1}],
+  mul: [{a:2,b:3},{a:3,b:2},{a:4,b:2}],
+  div: [{a:6,b:2},{a:8,b:4},{a:9,b:3}]
+};
+
 function mathGenerator(kind, max){
   return function(){
     var a,b,answer,text,choices;
@@ -89,15 +122,12 @@ function mathGenerator(kind, max){
       text = a+' ÷ '+b+' = ?';
       choices = choicesAround(answer, 0, 10, 4);
     } else if(kind === 'word'){
-      var stories = [
-        function(){ var x=rnd(2,10), y=rnd(1,10-0); y=rnd(1,Math.max(1,10-x)); return {text:'לְדָנָה יֵשׁ '+x+' תַּפּוּחִים, וְקִבְּלָה עוֹד '+y+'. כַּמָּה תַּפּוּחִים יֵשׁ לָהּ עַכְשָׁיו?', answer:x+y, emoji:'🍎'}; },
-        function(){ var x=rnd(5,20), y=rnd(1,x); return {text:'לְיוֹסִי הָיוּ '+x+' מַדְבְּקוֹת, הוּא נָתַן '+y+' לַחֲבֵרוֹ. כַּמָּה נִשְׁאֲרוּ לוֹ?', answer:x-y, emoji:'⭐'}; },
-        function(){ var x=rnd(2,6), y=rnd(2,5); return {text:'בַּכִּתָּה יֵשׁ '+x+' שֻׁלְחָנוֹת, וְעַל כָּל שֻׁלְחָן '+y+' עִפְּרוֹנוֹת. כַּמָּה עִפְּרוֹנוֹת בְּסַךְ הַכֹּל?', answer:x*y, emoji:'✏️'}; }
-      ];
-      var s = stories[rnd(0,stories.length-1)]();
-      text = s.text; answer = s.answer;
+      var story = WORD_STORIES[rnd(0,WORD_STORIES.length-1)];
+      var r = story.range();
+      answer = opAnswer(story.op, r.x, r.y);
+      text = story.setup(r.x)+' '+story.change(r.y)+' '+story.question;
       choices = choicesAround(answer, 0, 100, 4);
-      return { text:text, answer:answer, choices:choices, emoji:s.emoji };
+      return { text:text, answer:answer, choices:choices, emoji:story.emoji };
     }
     return { text:text, answer:answer, choices:choices };
   };
@@ -175,16 +205,16 @@ var CONTENT = {
         {
           id:'math', title:'חֶשְׁבּוֹן', icon:'➕', color:'#E0574A',
           levels: [
-            { id:'m1', title:'חִבּוּר עַד 10', icon:'➕', type:'math', gen: mathGenerator('add',10) },
-            { id:'m2', title:'חִבּוּר עַד 20', icon:'➕', type:'math', gen: mathGenerator('add',20) },
-            { id:'m3', title:'חִבּוּר עַד 100', icon:'➕', type:'math', gen: mathGenerator('add',100) },
-            { id:'m4', title:'חִסּוּר עַד 10', icon:'➖', type:'math', gen: mathGenerator('sub',10) },
-            { id:'m5', title:'חִסּוּר עַד 20', icon:'➖', type:'math', gen: mathGenerator('sub',20) },
-            { id:'m6', title:'חִסּוּר עַד 100', icon:'➖', type:'math', gen: mathGenerator('sub',100) },
-            { id:'m7', title:'לוּחַ הַכֶּפֶל 2-5', icon:'✖️', type:'math', gen: mathGenerator('mul',5) },
-            { id:'m8', title:'לוּחַ הַכֶּפֶל 6-10', icon:'✖️', type:'math', gen: mathGenerator('mul',10) },
-            { id:'m9', title:'חִלּוּק פָּשׁוּט', icon:'➗', type:'math', gen: mathGenerator('div',10) },
-            { id:'m10', title:'בְּעָיוֹת מִלּוּלִיּוֹת', icon:'📖', type:'mathword', gen: mathGenerator('word',0) }
+            { id:'m1', title:'חִבּוּר עַד 10', icon:'➕', type:'math', kind:'add', gen: mathGenerator('add',10) },
+            { id:'m2', title:'חִבּוּר עַד 20', icon:'➕', type:'math', kind:'add', gen: mathGenerator('add',20) },
+            { id:'m3', title:'חִבּוּר עַד 100', icon:'➕', type:'math', kind:'add', gen: mathGenerator('add',100) },
+            { id:'m4', title:'חִסּוּר עַד 10', icon:'➖', type:'math', kind:'sub', gen: mathGenerator('sub',10) },
+            { id:'m5', title:'חִסּוּר עַד 20', icon:'➖', type:'math', kind:'sub', gen: mathGenerator('sub',20) },
+            { id:'m6', title:'חִסּוּר עַד 100', icon:'➖', type:'math', kind:'sub', gen: mathGenerator('sub',100) },
+            { id:'m7', title:'לוּחַ הַכֶּפֶל 2-5', icon:'✖️', type:'math', kind:'mul', gen: mathGenerator('mul',5) },
+            { id:'m8', title:'לוּחַ הַכֶּפֶל 6-10', icon:'✖️', type:'math', kind:'mul', gen: mathGenerator('mul',10) },
+            { id:'m9', title:'חִלּוּק פָּשׁוּט', icon:'➗', type:'math', kind:'div', gen: mathGenerator('div',10) },
+            { id:'m10', title:'בְּעָיוֹת מִלּוּלִיּוֹת', icon:'📖', type:'mathword', kind:'word', gen: mathGenerator('word',0) }
           ]
         },
         {
