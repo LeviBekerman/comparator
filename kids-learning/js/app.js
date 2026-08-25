@@ -19,6 +19,11 @@ function E(tag, attrs, children){
   return node;
 }
 
+function starsNode(n){
+  var wrap = E('div',{class:'dots-wrap'},[]);
+  for(var i=0;i<n;i++) wrap.appendChild(E('span',{class:'dot-star'},['⭐']));
+  return wrap;
+}
 function starsString(n){
   n = n||0;
   var s='';
@@ -93,7 +98,7 @@ function getPracticeQuestion(level){
   if(t === 'numbers'){
     var item = pick(level.items);
     var choices = choicesAround(item.n, 1, 20, 4).map(function(v){ return {label:String(v), value:v}; });
-    return { emoji:null, qMain:item.dots, qText:'כַּמָּה כּוֹכָבִים יֵשׁ כָּאן?', choices:choices, correct:item.n, speak:item.word, lang:'he' };
+    return { emoji:null, qMain:starsNode(item.n), qText:'כַּמָּה כּוֹכָבִים יֵשׁ כָּאן?', choices:choices, correct:item.n, speak:item.word, lang:'he' };
   }
   if(t === 'nikud'){
     var item = pick(level.items);
@@ -135,7 +140,7 @@ function getMatchItems(level){
   return pool.map(function(item, idx){
     var a,b;
     if(t==='letters'){ a={main:item.ch}; b={emoji:item.emoji, sub:item.word}; }
-    else if(t==='numbers'){ a={main:String(item.n)}; b={emoji:item.dots}; }
+    else if(t==='numbers'){ a={main:String(item.n)}; b={emoji:starsNode(item.n)}; }
     else if(t==='nikud'){ a={main:item.demo}; b={main:SOUND_LABEL[item.sound]}; }
     else if(t==='eng'){ a={main:item.l}; b={emoji:item.e, sub:item.w}; }
     else if(t==='engword'||t==='engnum'){ a={main:item.w}; b={emoji:item.e}; }
@@ -358,7 +363,7 @@ function buildLessonSteps(lv){
     return lv.items.map(function(it){ return { emoji:it.emoji, main:it.ch, sub:it.name, extra:it.word, speak:it.name+'. '+it.word, lang:'he' }; });
   }
   if(t==='numbers'){
-    return lv.items.map(function(it){ return { emoji:null, main:String(it.n), sub:it.dots, extra:it.word, speak:it.word, lang:'he' }; });
+    return lv.items.map(function(it){ return { emoji:null, main:String(it.n), sub:starsNode(it.n), extra:it.word, speak:it.word, lang:'he' }; });
   }
   if(t==='nikud'){
     return lv.items.map(function(it){ return { emoji:it.emoji, main:it.demo, sub:it.sym, extra:it.word, speak:it.demo+'. '+it.word, lang:'he' }; });
