@@ -3,6 +3,7 @@ var SPEECH = (function(){
   var supported = typeof window !== 'undefined' && 'speechSynthesis' in window;
   var voices = [];
   var preferred = { he: null, en: null }; // voiceURI chosen by the user, if any
+  var plainMode = false; // when true, strip niqqud before speaking (some voices read plain Hebrew more naturally)
 
   function loadVoices(){
     if(!supported) return;
@@ -27,11 +28,13 @@ var SPEECH = (function(){
   }
 
   function setPreferred(lang, voiceURI){ preferred[lang] = voiceURI || null; }
+  function setPlainMode(v){ plainMode = !!v; }
+  function stripNiqqud(text){ return text.replace(/[֑-ׇ]/g, ''); }
 
   function estimateDuration(text){
-    if(!text) return 900;
-    var ms = text.replace(/[֑-ׇ]/g,'').length * 95;
-    return Math.max(1100, Math.min(ms, 6000));
+    if(!text) return 1200;
+    var ms = stripNiqqud(text).length * 130 + 500;
+    return Math.max(1400, Math.min(ms, 8000));
   }
 
   function speak(text, lang, onEnd){
@@ -42,9 +45,10 @@ var SPEECH = (function(){
     }
     try{
       window.speechSynthesis.cancel();
-      var utter = new SpeechSynthesisUtterance(text);
+      var spoken = (langKey==='he' && plainMode) ? stripNiqqud(text) : text;
+      var utter = new SpeechSynthesisUtterance(spoken);
       utter.lang = langKey === 'en' ? 'en-US' : 'he-IL';
-      utter.rate = 0.92;
+      utter.rate = langKey === 'en' ? 0.88 : 0.8;
       utter.pitch = 1.0;
       var v = pickVoice(langKey);
       if(v) utter.voice = v;
@@ -53,7 +57,7 @@ var SPEECH = (function(){
       utter.onend = finish;
       utter.onerror = finish;
       window.speechSynthesis.speak(utter);
-      if(onEnd) setTimeout(finish, estimateDuration(text) + 3000);
+      if(onEnd) setTimeout(finish, estimateDuration(text) + 3500);
       return true;
     } catch(e){
       if(onEnd) setTimeout(onEnd, estimateDuration(text));
@@ -68,6 +72,7 @@ var SPEECH = (function(){
     isSupported: function(){ return supported; },
     voicesFor: voicesFor,
     setPreferred: setPreferred,
+    setPlainMode: setPlainMode,
     estimateDuration: estimateDuration
   };
 })();

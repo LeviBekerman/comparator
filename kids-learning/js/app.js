@@ -56,15 +56,17 @@ function loadState(){
     if(raw){
       var s = JSON.parse(raw);
       if(!s.voicePrefs) s.voicePrefs = { he:null, en:null };
+      if(s.speakPlain === undefined) s.speakPlain = false;
       return s;
     }
   }catch(e){}
-  return { profiles: [], currentId: null, voicePrefs: { he:null, en:null } };
+  return { profiles: [], currentId: null, voicePrefs: { he:null, en:null }, speakPlain:false };
 }
 function saveState(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(STATE)); }catch(e){} }
 var STATE = loadState();
 SPEECH.setPreferred('he', STATE.voicePrefs.he);
 SPEECH.setPreferred('en', STATE.voicePrefs.en);
+SPEECH.setPlainMode(STATE.speakPlain);
 
 function currentProfile(){
   return STATE.profiles.find(function(p){ return p.id === STATE.currentId; }) || null;
@@ -237,6 +239,27 @@ function screenSettings(){
   }
 
   wrap.appendChild(E('div',{class:'feedback', style:'text-align:right;font-weight:400;font-size:14px;'},['בּוֹחֲרִים אֶת הַקּוֹל הֲכִי טִבְעִי שֶׁמֻּתְקָן בַּמַּכְשִׁיר שֶׁלָּכֶם. קוֹלוֹת "מְקוֹמִיִּים" עוֹבְדִים גַּם בְּלִי אִינְטֶרְנֶט.']));
+
+  var nikSection = E('div',{},[E('h2',{class:'section-title'},['הֶגְיוֹן הַקְרָאָה'])]);
+  nikSection.appendChild(E('div',{class:'feedback', style:'text-align:right;font-weight:400;font-size:14px;'},[
+    'אִם הַהַטְעָמָה (מִלְּעֵיל/מִלְּרַע) נִשְׁמַעַת לֹא נָכוֹן, יֵשׁ קוֹלוֹת שֶׁמַּקְרִיאִים טוֹב יוֹתֵר טֶקְסְט בְּלִי נִקּוּד. אֶפְשָׁר לְנַסּוֹת וְלִבְחֹר מַה שֶׁנִּשְׁמָע הֲכִי טִבְעִי.'
+  ]));
+  var toggleRow = E('div',{class:'profiles-grid'},[]);
+  [ {v:false, label:'עִם נִקּוּד', icon:'🔤'}, {v:true, label:'בְּלִי נִקּוּד', icon:'📝'} ].forEach(function(opt){
+    var isSel = STATE.speakPlain === opt.v;
+    toggleRow.appendChild(E('button',{class:'card', style: isSel?'border:3px solid var(--accent);':'', onclick:function(){
+      STATE.speakPlain = opt.v; saveState();
+      SPEECH.setPlainMode(opt.v);
+      SPEECH.speak('שָׁלוֹם, כָּכָה אֲנִי נִשְׁמַעַת', 'he');
+      nav(Object.assign({},VIEW));
+    }},[
+      E('div',{class:'icon'},[isSel?'✅':opt.icon]),
+      E('div',{class:'title', style:'font-size:15px;'},[opt.label])
+    ]));
+  });
+  nikSection.appendChild(toggleRow);
+  wrap.appendChild(nikSection);
+
   wrap.appendChild(voiceRow('he','🇮🇱 עִבְרִית'));
   wrap.appendChild(voiceRow('en','🇬🇧 English'));
   wrap.appendChild(E('button',{class:'big-btn ghost', onclick:function(){ nav(back); }},['חֲזָרָה']));
@@ -378,6 +401,8 @@ function screenLevels(){
 /* ---------- מסך שיעור (וידאו קצר מונחה קול, מתקדם אוטומטית) ---------- */
 var LESSON_TOKEN = 0;
 var LESSON_PLAYING = true;
+var ADVANCE_PAUSE_MS = 1500;
+var ADVANCE_PAUSE_FINAL_MS = 2000;
 function screenLesson(){
   var world = findWorld(VIEW.worldId), mod = findModule(world, VIEW.moduleId), lv = findLevel(mod, VIEW.levelId);
   var wrap = E('div',{},[]);
@@ -454,12 +479,17 @@ function screenLesson(){
   } else {
     var fillEl = timebar.firstChild;
     if(LESSON_PLAYING){
-      var dur = SPEECH.estimateDuration(step.speak);
+      var pauseAfter = isLast ? 0 : ADVANCE_PAUSE_MS;
+      var dur = SPEECH.estimateDuration(step.speak) + pauseAfter;
       fillEl.style.transitionDuration = dur+'ms';
       requestAnimationFrame(function(){ requestAnimationFrame(function(){ if(myToken===LESSON_TOKEN) fillEl.style.width='100%'; }); });
       SPEECH.speak(step.speak, step.lang, function(){
         if(myToken !== LESSON_TOKEN || !LESSON_PLAYING) return;
-        if(!isLast){ nav(Object.assign({},VIEW,{step:i+1})); }
+        if(isLast) return;
+        setTimeout(function(){
+          if(myToken !== LESSON_TOKEN || !LESSON_PLAYING) return;
+          nav(Object.assign({},VIEW,{step:i+1}));
+        }, ADVANCE_PAUSE_MS);
       });
     } else {
       fillEl.style.width = '0%';
@@ -613,9 +643,11 @@ function driveMathDemo(stageWrap, spec, token, onComplete){
     ph.render(stageEl);
     captionEl.textContent = ph.text;
     if(LESSON_PLAYING){
+      var isLastPhase = n === phases.length-1;
+      var pause = isLastPhase ? ADVANCE_PAUSE_FINAL_MS : ADVANCE_PAUSE_MS;
       SPEECH.speak(ph.text, 'he', function(){
         if(token!==LESSON_TOKEN || !LESSON_PLAYING) return;
-        setTimeout(function(){ if(token===LESSON_TOKEN && LESSON_PLAYING) showPhase(idx+1); }, 300);
+        setTimeout(function(){ if(token===LESSON_TOKEN && LESSON_PLAYING) showPhase(idx+1); }, pause);
       });
     }
   }
