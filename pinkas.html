@@ -228,6 +228,7 @@
     </div>
     <div class="masthead-actions">
       <button class="btn btn-sm" id="licenseBadge" data-action="open-license"></button>
+      <button class="btn btn-sm" id="folderBadge" data-action="open-folder"></button>
       <button class="btn btn-sm" data-action="open-scan">📷 סריקת קבלה</button>
       <button class="btn btn-sm" data-action="open-batch">📚 ייבוא קבוצתי</button>
       <button class="btn btn-sm" data-action="export-backup">⭳ גיבוי</button>
@@ -246,7 +247,7 @@
 "use strict";
 
 /* ============================= DB ============================= */
-const DB_NAME='pinkas-db', DB_VERSION=1;
+const DB_NAME='pinkas-db', DB_VERSION=2;
 let dbPromise=null;
 function openDB(){
   if(dbPromise) return dbPromise;
@@ -260,6 +261,7 @@ function openDB(){
         s.createIndex('contactId','contactId');
       }
       if(!db.objectStoreNames.contains('receipts')) db.createObjectStore('receipts',{keyPath:'id'});
+      if(!db.objectStoreNames.contains('handles')) db.createObjectStore('handles',{keyPath:'id'});
     };
     req.onsuccess=()=>resolve(req.result);
     req.onerror=()=>reject(req.error);
@@ -268,6 +270,7 @@ function openDB(){
 }
 async function tx(storeName,mode){ const db=await openDB(); return db.transaction(storeName,mode).objectStore(storeName); }
 async function dbGetAll(storeName){ const s=await tx(storeName,'readonly'); return new Promise((res,rej)=>{ const r=s.getAll(); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function dbGet(storeName,key){ const s=await tx(storeName,'readonly'); return new Promise((res,rej)=>{ const r=s.get(key); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 async function dbPut(storeName,obj){ const s=await tx(storeName,'readwrite'); return new Promise((res,rej)=>{ const r=s.put(obj); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
 async function dbDelete(storeName,id){ const s=await tx(storeName,'readwrite'); return new Promise((res,rej)=>{ const r=s.delete(id); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
 async function dbClear(storeName){ const s=await tx(storeName,'readwrite'); return new Promise((res,rej)=>{ const r=s.clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
@@ -363,6 +366,142 @@ function licenseErrorMessage(err){
   return map[err] || err || 'שגיאה לא ידועה באימות הרישיון.';
 }
 
+/* ============================= WORKING FOLDER (local files, optionally Drive/Dropbox-synced) ============================= */
+// Mirrors contacts+transactions (JSON) and receipts (real files) into a folder the user
+// picks on their own computer. Nothing here talks to any server - if that folder happens
+// to live inside a Google Drive / Dropbox / OneDrive desktop-sync folder, cloud backup and
+// multi-device access come for free, with the data staying only in the user's own account.
+let folderHandle=null;
+let folderSyncTimer=null;
+
+function supportsFileSystemAccess(){ return typeof window!=='undefined' && 'showDirectoryPicker' in window; }
+function sanitizeFileName(name){ return String(name||'').replace(/[\/\\:*?"<>|]/g,'_').slice(0,180); }
+
+async function chooseWorkFolder(){
+  if(!supportsFileSystemAccess()){ alert('התכונה הזו זמינה כרגע רק ב-Chrome או Edge.'); return; }
+  let handle;
+  try{ handle=await window.showDirectoryPicker({ mode:'readwrite' }); }
+  catch(err){ if(err && err.name!=='AbortError') alert('שגיאה בבחירת תיקייה: '+err.message); return; }
+
+  const existing=await tryReadFolderData(handle);
+  try{ await dbPut('handles', { id:'workFolder', handle, folderName:handle.name }); }
+  catch(err){ console.warn('could not persist folder handle for next session', err); }
+  folderHandle=handle;
+  state.folderSync={ connected:true, folderName:handle.name, needsReconnect:false, lastSyncAt:null, status:'idle', error:null };
+
+  if(existing && state.contacts.length===0 && state.transactions.length===0 && (existing.contacts.length||existing.transactions?.length)){
+    if(confirm(`נמצאו נתונים קיימים בתיקייה "${handle.name}" (${existing.contacts.length} ספקים/לקוחות). לייבא אותם עכשיו?`)){
+      await importFromFolderData(existing);
+    }
+  }
+  render();
+  await syncToFolder();
+}
+async function reconnectWorkFolderOnLoad(){
+  let rec;
+  try{ rec=await dbGet('handles','workFolder'); }catch{ return; }
+  if(!rec || !rec.handle) return;
+  let perm;
+  try{ perm=await rec.handle.queryPermission({ mode:'readwrite' }); }catch{ perm='denied'; }
+  if(perm==='granted'){
+    folderHandle=rec.handle;
+    state.folderSync={ connected:true, folderName:rec.folderName, needsReconnect:false, lastSyncAt:null, status:'idle', error:null };
+  } else {
+    state.folderSync={ connected:false, folderName:rec.folderName, needsReconnect:true, lastSyncAt:null, status:'idle', error:null };
+  }
+  updateFolderBadge();
+}
+async function reconnectWorkFolderPermission(){
+  let rec;
+  try{ rec=await dbGet('handles','workFolder'); }catch{ return; }
+  if(!rec || !rec.handle) return;
+  let perm;
+  try{ perm=await rec.handle.requestPermission({ mode:'readwrite' }); }
+  catch(err){ alert('שגיאה באישור הגישה: '+err.message); return; }
+  if(perm==='granted'){
+    folderHandle=rec.handle;
+    state.folderSync={ connected:true, folderName:rec.folderName, needsReconnect:false, lastSyncAt:null, status:'idle', error:null };
+    render();
+    await syncToFolder();
+  } else {
+    alert('הגישה לתיקייה לא אושרה.');
+  }
+}
+async function disconnectWorkFolder(){
+  if(!confirm('להפסיק לסנכרן לתיקייה? הקבצים שכבר נכתבו אליה יישארו שם, אבל שינויים עתידיים לא ישמרו אליה עוד.')) return;
+  await dbDelete('handles','workFolder');
+  folderHandle=null;
+  state.folderSync={ connected:false, folderName:null, needsReconnect:false, lastSyncAt:null, status:'idle', error:null };
+  render();
+}
+function scheduleFolderSync(){
+  if(!folderHandle) return;
+  clearTimeout(folderSyncTimer);
+  folderSyncTimer=setTimeout(()=>{ syncToFolder(); }, 800);
+}
+async function syncToFolder(){
+  if(!folderHandle) return;
+  state.folderSync.status='syncing'; updateFolderBadge();
+  try{
+    const payload={ app:'pinkas', version:2, exportedAt:new Date().toISOString(), contacts:state.contacts, transactions:state.transactions };
+    const fileHandle=await folderHandle.getFileHandle('pinkas-data.json', { create:true });
+    const writable=await fileHandle.createWritable();
+    await writable.write(JSON.stringify(payload,null,2));
+    await writable.close();
+
+    const receiptsDir=await folderHandle.getDirectoryHandle('receipts', { create:true });
+    const receipts=await dbGetAll('receipts');
+    for(const r of receipts){
+      const rh=await receiptsDir.getFileHandle(sanitizeFileName(`${r.id}-${r.fileName}`), { create:true });
+      const w=await rh.createWritable();
+      await w.write(r.blob);
+      await w.close();
+    }
+    state.folderSync.status='idle'; state.folderSync.lastSyncAt=Date.now(); state.folderSync.error=null;
+  }catch(err){
+    state.folderSync.status='error'; state.folderSync.error=err.message;
+  }
+  updateFolderBadge();
+}
+async function tryReadFolderData(handle){
+  try{
+    const fh=await handle.getFileHandle('pinkas-data.json');
+    const file=await fh.getFile();
+    const data=JSON.parse(await file.text());
+    if(data && data.app==='pinkas' && Array.isArray(data.contacts)) return data;
+  }catch{ /* no existing data in this folder yet - that's fine */ }
+  return null;
+}
+async function importFromFolderData(data){
+  await dbClear('contacts'); await dbClear('transactions'); await dbClear('receipts');
+  for(const c of data.contacts) await dbPut('contacts', c);
+  for(const t of data.transactions||[]) await dbPut('transactions', t);
+  try{
+    const receiptsDir=await folderHandle.getDirectoryHandle('receipts');
+    for(const t of data.transactions||[]){
+      if(!t.receiptId) continue;
+      const prefix=t.receiptId+'-';
+      for await (const [name, fh] of receiptsDir.entries()){
+        if(fh.kind==='file' && name.startsWith(prefix)){
+          const file=await fh.getFile();
+          await dbPut('receipts', { id:t.receiptId, transactionId:t.id, fileName:name.slice(prefix.length), mimeType:file.type||'application/octet-stream', extractedText:'', blob:file, createdAt:Date.now() });
+        }
+      }
+    }
+  }catch{ /* no receipts subfolder - fine */ }
+  await loadAll();
+}
+function updateFolderBadge(){
+  const el=document.getElementById('folderBadge');
+  if(!el) return;
+  const fs=state.folderSync;
+  if(!fs || !fs.folderName){ el.textContent='☁ תיקיית עבודה'; el.setAttribute('aria-label','חיבור תיקיית עבודה מקומית (אופציונלי)'); }
+  else if(fs.connected && fs.status==='syncing'){ el.textContent='☁ שומר…'; el.setAttribute('aria-label','שומר לתיקיית העבודה'); }
+  else if(fs.connected && fs.status==='error'){ el.textContent='☁ שגיאה'; el.setAttribute('aria-label','שגיאה בשמירה לתיקיית העבודה'); }
+  else if(fs.connected){ el.textContent='☁ מסונכרן'; el.setAttribute('aria-label','מסונכרן לתיקיית עבודה: '+fs.folderName); }
+  else { el.textContent='☁ נדרש חיבור מחדש'; el.setAttribute('aria-label','תיקיית העבודה דורשת אישור גישה מחדש'); }
+}
+
 /* ============================= STATE ============================= */
 const state={
   view:'dashboard',      // dashboard | contact | reports | scan | batch | license
@@ -381,7 +520,8 @@ const state={
   exportMonth:null,
   scan:null,
   batch:null,
-  license: loadLicenseState() || { valid:false }
+  license: loadLicenseState() || { valid:false },
+  folderSync: { connected:false, folderName:null, needsReconnect:false, lastSyncAt:null, status:'idle', error:null }
 };
 
 function uid(){ return (crypto.randomUUID? crypto.randomUUID() : 'id-'+Date.now()+'-'+Math.random().toString(16).slice(2)); }
@@ -445,6 +585,7 @@ function render(){
     else if(state.view==='scan') html=renderScanView();
     else if(state.view==='batch') html=renderBatchView();
     else if(state.view==='license') html=renderLicenseView();
+    else if(state.view==='folder') html=renderFolderView();
     else html=renderDashboard();
   }catch(err){
     console.error('render error', err);
@@ -453,6 +594,7 @@ function render(){
   }
   el.innerHTML = renderNavTabs()+html;
   updateLicenseBadge();
+  updateFolderBadge();
 }
 function renderNavTabs(){
   const dashActive = state.view==='dashboard' || state.view==='contact' || state.view==='scan' || state.view==='batch';
@@ -897,6 +1039,37 @@ function renderLicenseView(){
     </div>
   </div>`;
 }
+function renderFolderView(){
+  const fs=state.folderSync;
+  const supported=supportsFileSystemAccess();
+  return `<div class="panel">
+    <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" data-action="nav-dashboard" aria-label="חזרה ללוח הבקרה">→ חזרה</button><h2>תיקיית עבודה</h2></div></div>
+    <div style="padding:18px;max-width:520px;line-height:1.7;">
+      <p style="color:var(--ink-soft);font-size:12.5px;">
+        חברו תיקייה על המחשב שלכם — פנקס ישמור שם באופן שוטף קובץ עם הספקים/הלקוחות והתנועות, ואת תמונות/קבצי הקבלות כקבצים רגילים.
+        אם התיקייה הזו מסונכרנת עם Google Drive, Dropbox או OneDrive (כלומר יש לכם את תוכנת הסנכרון שלהם מותקנת), תקבלו גיבוי בענן וגישה ממספר מחשבים —
+        בלי שום שרת מצדנו, והנתונים נשארים אך ורק בחשבון הענן שלכם.
+      </p>
+      ${!supported ? `<div class="banner-warn" role="status">התכונה הזו נתמכת כרגע רק ב-Chrome או Edge (שולחני). בדפדפנים אחרים האפליקציה ממשיכה לעבוד כרגיל, פשוט בלי סנכרון לתיקייה.</div>` : ''}
+      ${fs.error ? `<div class="banner-warn" role="status">שגיאה בשמירה לתיקייה: ${esc(fs.error)}</div>` : ''}
+      ${fs.connected ? `
+        <div class="banner-warn" style="background:var(--good-soft);border-color:var(--good);color:var(--good);" role="status">
+          ☁ מחובר לתיקייה "${esc(fs.folderName)}"${fs.lastSyncAt?` · נשמר לאחרונה ${new Date(fs.lastSyncAt).toLocaleTimeString('he-IL')}`:''}
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-sm" data-action="sync-folder-now">סנכרון עכשיו</button>
+          <button class="btn btn-ghost btn-sm" data-action="disconnect-folder">ניתוק</button>
+        </div>
+      ` : fs.needsReconnect ? `
+        <div class="banner-warn" role="status">האפליקציה זוכרת חיבור לתיקייה "${esc(fs.folderName)}", אבל צריך לאשר גישה מחדש (הדפדפן דורש זאת מדי פעם מטעמי אבטחה).</div>
+        <button class="btn btn-primary btn-sm" data-action="reconnect-folder">אישור גישה מחדש</button>
+      ` : supported ? `
+        <button class="btn btn-primary btn-sm" data-action="choose-folder">בחירת תיקייה</button>
+      ` : ''}
+      <p style="color:var(--ink-faint);font-size:11px;margin-top:16px;">שימו לב: אם עובדים משני מחשבים על אותה תיקייה בו-זמנית, השמירה האחרונה היא זו שנשמרת (בלי מיזוג אוטומטי) — בדיוק כמו כל קובץ משותף אחר.</p>
+    </div>
+  </div>`;
+}
 function renderScanView(){
   if(!isPro()) return renderPaywall('סריקת קבלות אוטומטית');
   if(!state.scan) return renderScanUpload();
@@ -1015,6 +1188,7 @@ async function confirmScan(){
   await dbPut('transactions',t); state.transactions.push(t);
   if(s.previewSrc) URL.revokeObjectURL(s.previewSrc);
   state.scan=null; state.view='contact'; state.contactId=contactId;
+  scheduleFolderSync();
   render(); focusRegion();
 }
 function cancelScan(){
@@ -1196,6 +1370,7 @@ async function approveBatchItem(){
   t.receiptId=await storeReceiptBlob(item.blob, item.fileName, t.id, item.rawText);
   await dbPut('transactions',t); state.transactions.push(t);
   item.decision='approved'; b.approvedCount++;
+  scheduleFolderSync();
   advanceBatch();
 }
 async function skipBatchItem(){
@@ -1228,6 +1403,7 @@ async function addContact(form){
   await dbPut('contacts',c);
   state.contacts.push(c);
   state.showAddContact=false;
+  scheduleFolderSync();
   render();
 }
 async function updateContact(id, form){
@@ -1242,6 +1418,7 @@ async function updateContact(id, form){
   c.notes=(fd.get('notes')||'').toString().trim();
   await dbPut('contacts',c);
   state.editContactId=null;
+  scheduleFolderSync();
   render();
 }
 async function deleteContact(id){
@@ -1253,6 +1430,7 @@ async function deleteContact(id){
   await dbDelete('contacts',id);
   state.contacts=state.contacts.filter(x=>x.id!==id);
   state.transactions=state.transactions.filter(x=>x.contactId!==id);
+  scheduleFolderSync();
   render();
 }
 async function addTransaction(form){
@@ -1271,6 +1449,7 @@ async function addTransaction(form){
   state.transactions.push(t);
   state.showAddTx=false;
   state.pendingReceiptFile=null;
+  scheduleFolderSync();
   render();
 }
 async function deleteTransaction(id){
@@ -1280,6 +1459,7 @@ async function deleteTransaction(id){
   if(t.receiptId) await dbDelete('receipts',t.receiptId);
   await dbDelete('transactions',id);
   state.transactions=state.transactions.filter(x=>x.id!==id);
+  scheduleFolderSync();
   render();
 }
 async function storeReceiptBlob(blob, fileName, transactionId, extractedText){
@@ -1294,6 +1474,7 @@ async function attachReceiptToRow(txId, file){
   const id=await storeReceiptBlob(file, file.name, txId, '');
   t.receiptId=id;
   await dbPut('transactions',t);
+  scheduleFolderSync();
   render();
 }
 async function removeReceiptFromTx(txId){
@@ -1303,6 +1484,7 @@ async function removeReceiptFromTx(txId){
   delete state.receiptsMeta[t.receiptId];
   t.receiptId=null;
   await dbPut('transactions',t);
+  scheduleFolderSync();
   render();
 }
 async function editAllocationNumber(txId){
@@ -1312,6 +1494,7 @@ async function editAllocationNumber(txId){
   if(value===null) return;
   t.allocationNumber=value.trim();
   await dbPut('transactions',t);
+  scheduleFolderSync();
   render();
 }
 function updateManualAllocWarning(){
@@ -1392,6 +1575,7 @@ async function importBackup(file){
   for(const r of data.receipts||[]) await dbPut('receipts',{ id:r.id, transactionId:r.transactionId, fileName:r.fileName, mimeType:r.mimeType, extractedText:r.extractedText||'', blob:base64ToBlob(r.data,r.mimeType), createdAt:Date.now() });
   state.view='dashboard'; state.contactId=null; state.scan=null; state.batch=null;
   await loadAll();
+  scheduleFolderSync();
 }
 
 /* ============================= REPORTS ============================= */
@@ -1614,6 +1798,11 @@ document.getElementById('app').addEventListener('click', async (e)=>{
   else if(action==='cancel-edit-contact'){ state.editContactId=null; render(); }
   else if(action==='open-license'){ state.view='license'; render(); focusRegion(); }
   else if(action==='deactivate-license'){ deactivateLicense(); }
+  else if(action==='open-folder'){ state.view='folder'; render(); focusRegion(); }
+  else if(action==='choose-folder'){ await chooseWorkFolder(); }
+  else if(action==='reconnect-folder'){ await reconnectWorkFolderPermission(); }
+  else if(action==='disconnect-folder'){ await disconnectWorkFolder(); }
+  else if(action==='sync-folder-now'){ await syncToFolder(); render(); }
   else if(action==='attach-row'){ const inp=target.querySelector('input[type=file]'); if(inp) inp.click(); }
   else if(action==='export-backup'){ await exportBackup(); }
   else if(action==='export-month-csv'){ exportMonthCsv(); }
@@ -1709,8 +1898,10 @@ document.getElementById('importInput').addEventListener('change', async (e)=>{
 
 /* ============================= INIT ============================= */
 updateLicenseBadge();
+updateFolderBadge();
 loadAll();
 backgroundRecheckLicense();
+reconnectWorkFolderOnLoad();
 
 })();
 </script>
