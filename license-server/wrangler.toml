@@ -1,0 +1,20 @@
+name = "pinkas-license-server"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+[vars]
+# Your Gumroad product's ID (not the permalink) - see README.md for how to find it.
+GUMROAD_PRODUCT_ID = "REPLACE_ME"
+# Lock this down to your app's real origin once you know it (e.g. "https://yourname.github.io").
+# Leave as "*" while testing locally.
+ALLOWED_ORIGIN = "*"
+# How many devices/browsers a single key may activate before being refused. Optional - remove to disable the limit.
+MAX_ACTIVATIONS = "3"
+
+# Optional but recommended: lets the worker keep serving the last known-good
+# result for a purchase if Gumroad's API is briefly unreachable.
+# Create with: wrangler kv namespace create LICENSES
+# Then paste the returned id below.
+# [[kv_namespaces]]
+# binding = "LICENSES"
+# id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"

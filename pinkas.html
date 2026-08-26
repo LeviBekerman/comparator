@@ -227,6 +227,7 @@
       </div>
     </div>
     <div class="masthead-actions">
+      <button class="btn btn-sm" id="licenseBadge" data-action="open-license"></button>
       <button class="btn btn-sm" data-action="open-scan">📷 סריקת קבלה</button>
       <button class="btn btn-sm" data-action="open-batch">📚 ייבוא קבוצתי</button>
       <button class="btn btn-sm" data-action="export-backup">⭳ גיבוי</button>
@@ -271,9 +272,100 @@ async function dbPut(storeName,obj){ const s=await tx(storeName,'readwrite'); re
 async function dbDelete(storeName,id){ const s=await tx(storeName,'readwrite'); return new Promise((res,rej)=>{ const r=s.delete(id); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
 async function dbClear(storeName){ const s=await tx(storeName,'readwrite'); return new Promise((res,rej)=>{ const r=s.clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); }); }
 
+/* ============================= LICENSE (pro features gate) ============================= */
+// Fill this in after deploying license-server/ (see license-server/README.md).
+// Left empty, licensing is simply off: pro features stay locked with a note explaining why.
+const LICENSE_SERVER_URL='';
+const PURCHASE_URL='';
+const LICENSE_RECHECK_DAYS=14;
+const LICENSE_OFFLINE_MAX_DAYS=45;
+
+function loadLicenseState(){
+  try{ const raw=localStorage.getItem('pinkas-license'); return raw?JSON.parse(raw):null; }
+  catch{ return null; }
+}
+function saveLicenseState(lic){
+  try{ localStorage.setItem('pinkas-license', JSON.stringify(lic)); }catch{}
+}
+function clearLicenseState(){
+  try{ localStorage.removeItem('pinkas-license'); }catch{}
+}
+function getOrCreateDeviceId(){
+  try{
+    let id=localStorage.getItem('pinkas-device-id');
+    if(!id){ id=uid(); localStorage.setItem('pinkas-device-id', id); }
+    return id;
+  }catch{ return uid(); }
+}
+function isPro(){ return !!(state.license && state.license.valid); }
+function updateLicenseBadge(){
+  const el=document.getElementById('licenseBadge');
+  if(!el) return;
+  if(isPro()){ el.textContent='✓ פרו'; el.setAttribute('aria-label','רישיון פרו פעיל — לניהול הרישיון'); }
+  else { el.textContent='🔒 חינמי'; el.setAttribute('aria-label','גרסה חינמית — למעבר לרישיון פרו'); }
+}
+async function verifyLicense(key, activate){
+  if(!LICENSE_SERVER_URL) return { valid:false, error:'server_not_configured' };
+  try{
+    const resp=await fetch(LICENSE_SERVER_URL.replace(/\/$/,'')+'/verify', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ key, activate:!!activate, deviceId:getOrCreateDeviceId() })
+    });
+    const data=await resp.json();
+    return { ...data, key, checkedAt:Date.now() };
+  }catch(err){
+    return { valid:false, error:'network', networkError:true, key };
+  }
+}
+async function activateLicense(key){
+  key=(key||'').trim();
+  if(!key) return { valid:false, error:'missing_key' };
+  const result=await verifyLicense(key, true);
+  state.license=result;
+  saveLicenseState(result);
+  render();
+  return result;
+}
+function deactivateLicense(){
+  state.license={ valid:false };
+  clearLicenseState();
+  render();
+}
+async function backgroundRecheckLicense(){
+  const lic=state.license;
+  if(!lic || !lic.key) return;
+  const daysSince=(Date.now()-(lic.checkedAt||0))/86400000;
+  if(daysSince<LICENSE_RECHECK_DAYS) return;
+  const result=await verifyLicense(lic.key, false);
+  if(result.networkError){
+    if(daysSince>LICENSE_OFFLINE_MAX_DAYS){
+      state.license={ ...lic, valid:false, error:'offline_grace_expired' };
+      saveLicenseState(state.license);
+      render();
+    }
+    return;
+  }
+  state.license=result;
+  saveLicenseState(result);
+  render();
+}
+function licenseErrorMessage(err){
+  const map={
+    server_not_configured:'שרת הרישוי עדיין לא הוגדר באפליקציה זו.',
+    missing_key:'נא להזין מפתח רישיון.',
+    network:'לא ניתן להתחבר לשרת האימות כרגע. אם כבר הפעלתם בעבר, האפליקציה תמשיך לעבוד; אחרת נסו שוב כשיש אינטרנט.',
+    verification_unreachable:'שרת האימות אינו זמין כרגע. נסו שוב בעוד כמה דקות.',
+    invalid_license:'מפתח הרישיון אינו תקין.',
+    refunded_or_chargebacked:'הרכישה המשויכת למפתח זה בוטלה או הוחזרה.',
+    max_activations_reached:'המפתח הזה כבר הופעל במספר המרבי של מכשירים.',
+    offline_grace_expired:'לא הצלחנו לאמת את הרישיון מול השרת יותר מדי זמן. נא להתחבר לאינטרנט פעם אחת לאימות מחדש.'
+  };
+  return map[err] || err || 'שגיאה לא ידועה באימות הרישיון.';
+}
+
 /* ============================= STATE ============================= */
 const state={
-  view:'dashboard',      // dashboard | contact | reports | scan | batch
+  view:'dashboard',      // dashboard | contact | reports | scan | batch | license
   contactId:null,
   contacts:[],
   transactions:[],
@@ -288,7 +380,8 @@ const state={
   editContactId:null,
   exportMonth:null,
   scan:null,
-  batch:null
+  batch:null,
+  license: loadLicenseState() || { valid:false }
 };
 
 function uid(){ return (crypto.randomUUID? crypto.randomUUID() : 'id-'+Date.now()+'-'+Math.random().toString(16).slice(2)); }
@@ -351,6 +444,7 @@ function render(){
     else if(state.view==='reports') html=renderReports();
     else if(state.view==='scan') html=renderScanView();
     else if(state.view==='batch') html=renderBatchView();
+    else if(state.view==='license') html=renderLicenseView();
     else html=renderDashboard();
   }catch(err){
     console.error('render error', err);
@@ -358,6 +452,7 @@ function render(){
     return;
   }
   el.innerHTML = renderNavTabs()+html;
+  updateLicenseBadge();
 }
 function renderNavTabs(){
   const dashActive = state.view==='dashboard' || state.view==='contact' || state.view==='scan' || state.view==='batch';
@@ -768,7 +863,42 @@ function isoOrNull(y,mo,d){
 }
 
 /* ============================= SCAN FLOW (single receipt) ============================= */
+function renderPaywall(featureName){
+  return `<div class="panel">
+    <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" data-action="nav-dashboard" aria-label="חזרה ללוח הבקרה">→ חזרה</button><h2>${esc(featureName)} — תכונת פרו</h2></div></div>
+    <div class="empty-state">
+      <div class="es-icon" aria-hidden="true">🔒</div>
+      <h3>נדרש רישיון בתשלום</h3>
+      <p>${esc(featureName)} היא תכונה בתשלום. ניהול ספקים/לקוחות, תנועות ידניות, דוחות וייצוא ה-CSV נשארים חינמיים לתמיד.</p>
+      <p style="margin-top:16px;"><button class="btn btn-primary btn-sm" data-action="open-license">מעבר לניהול רישיון</button></p>
+    </div>
+  </div>`;
+}
+function renderLicenseView(){
+  const lic=state.license||{valid:false};
+  const maskedKey = lic.key ? lic.key.slice(0,4)+'••••'+lic.key.slice(-4) : '';
+  return `<div class="panel">
+    <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" data-action="nav-dashboard" aria-label="חזרה ללוח הבקרה">→ חזרה</button><h2>ניהול רישיון</h2></div></div>
+    <div style="padding:18px;max-width:440px;">
+      ${lic.valid ? `
+        <div class="banner-warn" style="background:var(--good-soft);border-color:var(--good);color:var(--good);" role="status">✓ פרו מופעל${lic.email?` (${esc(lic.email)})`:''} — מפתח ${esc(maskedKey)}</div>
+        <p style="color:var(--ink-soft);font-size:12.5px;">סריקת קבלות וייבוא קבוצתי פתוחים במכשיר הזה.</p>
+        <button class="btn btn-sm" data-action="deactivate-license">ביטול הפעלה במכשיר זה</button>
+      ` : `
+        ${lic.error ? `<div class="banner-warn" role="status">${esc(licenseErrorMessage(lic.error))}</div>` : ''}
+        <p style="color:var(--ink-soft);font-size:12.5px;">הזינו מפתח רישיון כדי לפתוח סריקת קבלות אוטומטית וייבוא קבוצתי. שאר האפליקציה חינמית ללא הגבלה.</p>
+        <form id="licenseActivateForm" style="display:flex;gap:8px;margin:14px 0;">
+          <label for="licenseKeyInput" class="visually-hidden">מפתח רישיון</label>
+          <input id="licenseKeyInput" type="text" placeholder="הדבק כאן מפתח רישיון" style="flex:1;padding:8px 10px;border:1px solid var(--paper-line);border-radius:var(--radius-sm);" value="${esc(lic.key||'')}">
+          <button type="submit" class="btn btn-primary btn-sm">הפעלה</button>
+        </form>
+        ${PURCHASE_URL ? `<p><a href="${esc(PURCHASE_URL)}" target="_blank" rel="noopener" style="color:var(--brand-ink);font-weight:700;">רכישת רישיון ↗</a></p>` : `<p style="color:var(--ink-faint);font-size:11.5px;">קישור לרכישה יתעדכן כאן בקרוב.</p>`}
+      `}
+    </div>
+  </div>`;
+}
 function renderScanView(){
+  if(!isPro()) return renderPaywall('סריקת קבלות אוטומטית');
   if(!state.scan) return renderScanUpload();
   if(state.scan.status==='extracting') return renderScanProgress();
   if(state.scan.status==='review') return renderScanReview();
@@ -894,6 +1024,7 @@ function cancelScan(){
 
 /* ============================= BATCH FLOW (many receipts in one file) ============================= */
 function renderBatchView(){
+  if(!isPro()) return renderPaywall('ייבוא קבלות מרובות');
   if(!state.batch) return renderBatchUpload();
   if(state.batch.status==='split-setup') return renderBatchSplitSetup();
   if(state.batch.status==='extracting') return renderBatchProgress();
@@ -1481,6 +1612,8 @@ document.getElementById('app').addEventListener('click', async (e)=>{
   else if(action==='edit-allocation'){ await editAllocationNumber(id); }
   else if(action==='edit-contact'){ state.editContactId=id; render(); }
   else if(action==='cancel-edit-contact'){ state.editContactId=null; render(); }
+  else if(action==='open-license'){ state.view='license'; render(); focusRegion(); }
+  else if(action==='deactivate-license'){ deactivateLicense(); }
   else if(action==='attach-row'){ const inp=target.querySelector('input[type=file]'); if(inp) inp.click(); }
   else if(action==='export-backup'){ await exportBackup(); }
   else if(action==='export-month-csv'){ exportMonthCsv(); }
@@ -1502,6 +1635,11 @@ document.getElementById('app').addEventListener('submit', async (e)=>{
   else if(e.target.id==='scanForm'){ e.preventDefault(); await confirmScan(); }
   else if(e.target.id==='batchItemForm'){ e.preventDefault(); await approveBatchItem(); }
   else if(e.target.id==='splitForm'){ e.preventDefault(); await performImageSplit(); }
+  else if(e.target.id==='licenseActivateForm'){
+    e.preventDefault();
+    const input=document.getElementById('licenseKeyInput');
+    await activateLicense(input?input.value:'');
+  }
 });
 
 document.getElementById('app').addEventListener('input', (e)=>{
@@ -1570,7 +1708,9 @@ document.getElementById('importInput').addEventListener('change', async (e)=>{
 });
 
 /* ============================= INIT ============================= */
+updateLicenseBadge();
 loadAll();
+backgroundRecheckLicense();
 
 })();
 </script>
