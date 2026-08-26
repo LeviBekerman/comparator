@@ -285,6 +285,7 @@ const state={
   txType:'income',
   pendingReceiptFile:null,
   reportsContactId:'all',
+  editContactId:null,
   exportMonth:null,
   scan:null,
   batch:null
@@ -299,6 +300,15 @@ function round2(n){ return Math.round(n*100)/100; }
 
 function typeLabel(t){ return t==='supplier'?'ספק':t==='customer'?'לקוח':'ספק ולקוח'; }
 function typeClass(t){ return t==='supplier'?'t-supplier':t==='customer'?'t-customer':'t-both'; }
+
+/* ============================= מספר הקצאה (invoice allocation number) ============================= */
+function allocationThreshold(dateStr){
+  if(!dateStr) return 20000;
+  if(dateStr>='2026-06-01') return 5000;
+  if(dateStr>='2026-01-01') return 10000;
+  return 20000;
+}
+function needsAllocation(t){ return t && t.amount>=allocationThreshold(t.date); }
 
 /* ============================= DERIVED DATA ============================= */
 function txForContact(contactId){ return state.transactions.filter(t=>t.contactId===contactId); }
@@ -426,24 +436,32 @@ function renderEmptyContacts(hasSearch){
 }
 
 function renderAddContactForm(){
+  return renderContactForm({ formId:'contactForm', title:'הוספת ספק / לקוח', cancelAction:'toggle-add-contact' });
+}
+function renderEditContactForm(c){
+  return renderContactForm({ formId:'editContactForm', title:`עריכת פרטי ${esc(c.name)}`, cancelAction:'cancel-edit-contact', contact:c });
+}
+function renderContactForm({formId,title,cancelAction,contact}){
+  const c=contact||{ name:'', type:'customer', phone:'', businessId:'', notes:'' };
   return `<div class="form-panel">
-    <h4>הוספת ספק / לקוח</h4>
-    <form id="contactForm">
+    <h4>${title}</h4>
+    <form id="${formId}">
       <div class="form-grid">
-        <div class="field"><label for="cf-name">שם *</label><input id="cf-name" type="text" name="name" required autofocus></div>
-        <div class="field"><label for="cf-type">סוג</label>
-          <select id="cf-type" name="type">
-            <option value="customer">לקוח</option>
-            <option value="supplier">ספק</option>
-            <option value="both">ספק ולקוח</option>
+        <div class="field"><label for="cf-name-${formId}">שם *</label><input id="cf-name-${formId}" type="text" name="name" value="${esc(c.name)}" required autofocus></div>
+        <div class="field"><label for="cf-type-${formId}">סוג</label>
+          <select id="cf-type-${formId}" name="type">
+            <option value="customer" ${c.type==='customer'?'selected':''}>לקוח</option>
+            <option value="supplier" ${c.type==='supplier'?'selected':''}>ספק</option>
+            <option value="both" ${c.type==='both'?'selected':''}>ספק ולקוח</option>
           </select>
         </div>
-        <div class="field"><label for="cf-phone">טלפון</label><input id="cf-phone" type="text" name="phone"></div>
-        <div class="field"><label for="cf-notes">הערה</label><input id="cf-notes" type="text" name="notes"></div>
+        <div class="field"><label for="cf-phone-${formId}">טלפון</label><input id="cf-phone-${formId}" type="text" name="phone" value="${esc(c.phone)}"></div>
+        <div class="field"><label for="cf-bid-${formId}">מס' עוסק / ח.פ</label><input id="cf-bid-${formId}" type="text" name="businessId" value="${esc(c.businessId||'')}" placeholder="לצורך חשבוניות מס"></div>
+        <div class="field" style="grid-column:span 2;"><label for="cf-notes-${formId}">הערה</label><input id="cf-notes-${formId}" type="text" name="notes" value="${esc(c.notes)}"></div>
       </div>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary btn-sm">שמירה</button>
-        <button type="button" class="btn btn-ghost btn-sm" data-action="toggle-add-contact">ביטול</button>
+        <button type="button" class="btn btn-ghost btn-sm" data-action="${cancelAction}">ביטול</button>
       </div>
     </form>
   </div>`;
@@ -457,6 +475,8 @@ function renderContactView(){
   const rows=txForContact(c.id).slice().sort((a,b2)=>b2.date.localeCompare(a.date));
   const netClass = b.net>0?'pos':b.net<0?'neg':'zero';
 
+  const missingAllocation=rows.filter(t=>needsAllocation(t) && !t.allocationNumber).length;
+
   return `
     <div class="panel">
       <div class="detail-head">
@@ -464,13 +484,17 @@ function renderContactView(){
           <button class="btn btn-ghost btn-sm" data-action="nav-dashboard" aria-label="חזרה ללוח הבקרה">→ חזרה</button>
           <h2>${esc(c.name)}</h2>
           <span class="type-pill ${typeClass(c.type)}">${typeLabel(c.type)}</span>
+          ${c.businessId?`<span style="font-family:var(--font-mono);font-size:11.5px;color:var(--ink-soft);">עוסק/ח.פ: ${esc(c.businessId)}</span>`:''}
+          <button class="btn btn-ghost btn-sm" data-action="edit-contact" data-id="${c.id}" aria-label="עריכת פרטי ${esc(c.name)}">✎ עריכה</button>
         </div>
         <div class="balance-badge ${netClass}">מאזן: ${fmtMoney(b.net)}</div>
       </div>
+      ${state.editContactId===c.id ? renderEditContactForm(c) : ''}
       <div class="summary-row" style="padding:16px 18px 0;">
         <div class="summary-card c-income"><div class="num">${fmtMoney(b.income)}</div><div class="lbl">הכנסות מ${esc(c.name)}</div></div>
         <div class="summary-card c-expense"><div class="num">${fmtMoney(b.expense)}</div><div class="lbl">הוצאות ל${esc(c.name)}</div></div>
       </div>
+      ${missingAllocation ? `<div class="banner-warn" role="status">⚠ ${missingAllocation} תנועות מעל סף הדיווח המפורט (ראו מדריך רשות המסים) חסרות מספר הקצאה.</div>` : ''}
       <div class="toolbar" style="border-bottom:none;">
         <div class="spacer"></div>
         <button class="btn btn-sm" data-action="open-scan">📷 סריקת קבלה עבור ${esc(c.name)}</button>
@@ -480,7 +504,7 @@ function renderContactView(){
       ${rows.length===0 ? `<div class="empty-state"><div class="es-icon" aria-hidden="true">🧾</div><h3>אין עדיין תנועות</h3><p>הוסיפו הכנסה או הוצאה, או סרקו קבלה, כדי להתחיל לעקוב אחרי המאזן.</p></div>` : `
       <div class="table-scroll-x">
       <table class="data-table">
-        <thead><tr><th>תאריך</th><th>תיאור</th><th>סוג</th><th>סכום</th><th>קבלה</th><th><span class="visually-hidden">פעולות</span></th></tr></thead>
+        <thead><tr><th>תאריך</th><th>תיאור</th><th>סוג</th><th>סכום</th><th>מס' הקצאה</th><th>קבלה</th><th><span class="visually-hidden">פעולות</span></th></tr></thead>
         <tbody>
           ${rows.map(t=>renderTxRow(t)).join('')}
         </tbody>
@@ -500,8 +524,10 @@ function renderAddTxForm(){
       <div class="form-grid">
         <div class="field"><label for="tf-amount">סכום (₪) *</label><input id="tf-amount" type="number" name="amount" step="0.01" min="0.01" required></div>
         <div class="field"><label for="tf-date">תאריך *</label><input id="tf-date" type="date" name="date" value="${todayISO()}" required></div>
-        <div class="field" style="grid-column:span 2;"><label for="tf-desc">תיאור</label><input id="tf-desc" type="text" name="description" placeholder="לדוגמה: חשבונית 1042"></div>
+        <div class="field"><label for="tf-desc">תיאור</label><input id="tf-desc" type="text" name="description" placeholder="לדוגמה: חשבונית 1042"></div>
+        <div class="field"><label for="tf-alloc">מס' הקצאה</label><input id="tf-alloc" type="text" name="allocationNumber" placeholder="אם נדרש"></div>
       </div>
+      <p id="tf-alloc-warn" class="field-hint-warn" style="display:none;margin:0 0 10px;"></p>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary btn-sm">שמירה</button>
         <button type="button" class="btn btn-ghost btn-sm" data-action="toggle-add-tx">ביטול</button>
@@ -519,11 +545,17 @@ function renderTxRow(t){
   const receiptCell = meta
     ? `<span class="receipt-pill" title="${esc(meta.fileName)}">📎 <span data-action="view-receipt" data-id="${t.receiptId}" style="cursor:pointer;" role="button" tabindex="0">קבלה</span><button data-action="remove-receipt" data-id="${t.id}" aria-label="הסרת קבלה" title="הסרה">✕</button></span>`
     : `<label class="attach-drop" data-action="attach-row" data-id="${t.id}">📎 צירוף<input type="file" data-row-file="${t.id}" class="sr-file-input" aria-label="צירוף קבלה לתנועה מתאריך ${fmtDate(t.date)}"></label>`;
+  const allocCell = t.allocationNumber
+    ? `<span style="font-family:var(--font-mono);font-size:11.5px;">${esc(t.allocationNumber)}</span> <button data-action="edit-allocation" data-id="${t.id}" class="btn btn-ghost btn-sm" aria-label="עריכת מספר הקצאה" title="עריכה">✎</button>`
+    : needsAllocation(t)
+      ? `<button data-action="edit-allocation" data-id="${t.id}" class="btn btn-sm" style="color:var(--warn-ink);border-color:var(--warn);" aria-label="הוספת מספר הקצאה — נדרש מעל סף הדיווח המפורט">⚠ נדרש</button>`
+      : `<button data-action="edit-allocation" data-id="${t.id}" class="btn btn-ghost btn-sm" aria-label="הוספת מספר הקצאה">+ הוספה</button>`;
   return `<tr data-tx-row="${t.id}">
     <td>${fmtDate(t.date)}</td>
     <td>${esc(t.description||'—')}</td>
     <td><span class="type-pill ${t.type==='income'?'t-customer':'t-supplier'}">${t.type==='income'?'הכנסה':'הוצאה'}</span></td>
     <td class="numeric ${t.type==='income'?'pos':'neg'}">${t.type==='income'?'+':'-'}${fmtMoney(t.amount)}</td>
+    <td>${allocCell}</td>
     <td>${receiptCell}</td>
     <td><button class="btn btn-ghost btn-sm" data-action="delete-tx" data-id="${t.id}" aria-label="מחיקת תנועה" title="מחיקה">🗑</button></td>
   </tr>`;
@@ -537,6 +569,8 @@ function renderExtractFields(scope, form, parsed){
   const notDate = parsed.date.confidence==='none';
   const notVendor = parsed.vendor.confidence==='none';
   const contactsSorted = state.contacts.slice().sort((a,b)=>a.name.localeCompare(b.name,'he'));
+  const allocDate = form.date||todayISO();
+  const needsAllocNow = (parseFloat(form.amount)||0) >= allocationThreshold(allocDate);
   return `
     <div class="form-grid" style="grid-template-columns:1fr 1fr;">
       <div class="field">
@@ -566,6 +600,10 @@ function renderExtractFields(scope, form, parsed){
           <option value="customer" ${form.newContactType==='customer'?'selected':''}>לקוח</option>
           <option value="both" ${form.newContactType==='both'?'selected':''}>ספק ולקוח</option>
         </select>
+      </div>
+      <div class="field">
+        <label for="ef-newbid-${scope}">מס' עוסק / ח.פ</label>
+        <input id="ef-newbid-${scope}" type="text" data-ef="newBusinessId" data-scope="${scope}" value="${esc(form.newBusinessId||'')}">
       </div>` : ''}
       <div class="field ${notAmount?'not-detected':''}">
         <label for="ef-amount-${scope}">סכום (₪) *</label>
@@ -581,6 +619,11 @@ function renderExtractFields(scope, form, parsed){
         <label for="ef-desc-${scope}">תיאור</label>
         <input id="ef-desc-${scope}" type="text" data-ef="description" data-scope="${scope}" value="${esc(form.description)}">
       </div>
+      <div class="field" style="grid-column:span 2;">
+        <label for="ef-alloc-${scope}">מס' הקצאה</label>
+        <input id="ef-alloc-${scope}" type="text" data-ef="allocationNumber" data-scope="${scope}" value="${esc(form.allocationNumber||'')}" placeholder="אם נדרש">
+      </div>
+      <p id="ef-alloc-warn-${scope}" class="field-hint-warn" style="display:${needsAllocNow?'block':'none'};grid-column:span 2;margin:0;">${needsAllocNow?`⚠ מעל ${fmtMoney(allocationThreshold(allocDate))} לתאריך זה — נדרש מספר הקצאה לחשבונית מס`:''}</p>
     </div>`;
 }
 function activeExtractForm(scope){
@@ -815,10 +858,12 @@ function applyScanExtraction({text,engine,blob,fileName,note}){
       contactSel: matched?matched.id:'__new__',
       newContactName: parsed.vendor.value||'',
       newContactType:'supplier',
+      newBusinessId:'',
       type:'expense',
       amount: parsed.amount.value!=null?String(parsed.amount.value):'',
       date: parsed.date.value||todayISO(),
-      description: parsed.vendor.value||''
+      description: parsed.vendor.value||'',
+      allocationNumber:''
     }
   };
   render(); focusRegion();
@@ -832,10 +877,10 @@ async function confirmScan(){
   if(contactId==='__new__'){
     const name=f.newContactName.trim();
     if(!name){ alert('נא להזין שם ספק/לקוח.'); return; }
-    const c={ id:uid(), name, type:f.newContactType||'supplier', phone:'', notes:'', createdAt:Date.now() };
+    const c={ id:uid(), name, type:f.newContactType||'supplier', phone:'', businessId:(f.newBusinessId||'').trim(), notes:'', createdAt:Date.now() };
     await dbPut('contacts',c); state.contacts.push(c); contactId=c.id;
   }
-  const t={ id:uid(), contactId, type:f.type, amount, date:f.date, description:f.description.trim(), receiptId:null, createdAt:Date.now() };
+  const t={ id:uid(), contactId, type:f.type, amount, date:f.date, description:f.description.trim(), allocationNumber:(f.allocationNumber||'').trim(), receiptId:null, createdAt:Date.now() };
   t.receiptId=await storeReceiptBlob(s.receiptBlob, s.receiptFileName||'קבלה', t.id, s.rawText);
   await dbPut('transactions',t); state.transactions.push(t);
   if(s.previewSrc) URL.revokeObjectURL(s.previewSrc);
@@ -993,10 +1038,11 @@ function buildBatchQueue(items){
       form:{
         contactSel: matched?matched.id:'__new__',
         newContactName: parsed.vendor.value||'',
-        newContactType:'supplier', type:'expense',
+        newContactType:'supplier', newBusinessId:'', type:'expense',
         amount: parsed.amount.value!=null?String(parsed.amount.value):'',
         date: parsed.date.value||todayISO(),
-        description: parsed.vendor.value||''
+        description: parsed.vendor.value||'',
+        allocationNumber:''
       }
     };
   });
@@ -1012,10 +1058,10 @@ async function approveBatchItem(){
   if(contactId==='__new__'){
     const name=f.newContactName.trim();
     if(!name){ alert('נא להזין שם ספק/לקוח.'); return; }
-    const c={ id:uid(), name, type:f.newContactType||'supplier', phone:'', notes:'', createdAt:Date.now() };
+    const c={ id:uid(), name, type:f.newContactType||'supplier', phone:'', businessId:(f.newBusinessId||'').trim(), notes:'', createdAt:Date.now() };
     await dbPut('contacts',c); state.contacts.push(c); contactId=c.id;
   }
-  const t={ id:uid(), contactId, type:f.type, amount, date:f.date, description:f.description.trim(), receiptId:null, createdAt:Date.now() };
+  const t={ id:uid(), contactId, type:f.type, amount, date:f.date, description:f.description.trim(), allocationNumber:(f.allocationNumber||'').trim(), receiptId:null, createdAt:Date.now() };
   t.receiptId=await storeReceiptBlob(item.blob, item.fileName, t.id, item.rawText);
   await dbPut('transactions',t); state.transactions.push(t);
   item.decision='approved'; b.approvedCount++;
@@ -1047,10 +1093,24 @@ async function addContact(form){
   const fd=new FormData(form);
   const name=(fd.get('name')||'').toString().trim();
   if(!name) return;
-  const c={ id:uid(), name, type:fd.get('type')||'customer', phone:(fd.get('phone')||'').toString().trim(), notes:(fd.get('notes')||'').toString().trim(), createdAt:Date.now() };
+  const c={ id:uid(), name, type:fd.get('type')||'customer', phone:(fd.get('phone')||'').toString().trim(), businessId:(fd.get('businessId')||'').toString().trim(), notes:(fd.get('notes')||'').toString().trim(), createdAt:Date.now() };
   await dbPut('contacts',c);
   state.contacts.push(c);
   state.showAddContact=false;
+  render();
+}
+async function updateContact(id, form){
+  const c=state.contacts.find(x=>x.id===id);
+  if(!c) return;
+  const fd=new FormData(form);
+  const name=(fd.get('name')||'').toString().trim();
+  if(!name) return;
+  c.name=name; c.type=fd.get('type')||c.type;
+  c.phone=(fd.get('phone')||'').toString().trim();
+  c.businessId=(fd.get('businessId')||'').toString().trim();
+  c.notes=(fd.get('notes')||'').toString().trim();
+  await dbPut('contacts',c);
+  state.editContactId=null;
   render();
 }
 async function deleteContact(id){
@@ -1072,6 +1132,7 @@ async function addTransaction(form){
   const t={
     id:uid(), contactId:state.contactId, type:state.txType, amount,
     date:(fd.get('date')||todayISO()).toString(), description:(fd.get('description')||'').toString().trim(),
+    allocationNumber:(fd.get('allocationNumber')||'').toString().trim(),
     receiptId:null, createdAt:Date.now()
   };
   if(state.pendingReceiptFile){ t.receiptId=await storeReceiptBlob(state.pendingReceiptFile, state.pendingReceiptFile.name, t.id, ''); }
@@ -1112,6 +1173,43 @@ async function removeReceiptFromTx(txId){
   t.receiptId=null;
   await dbPut('transactions',t);
   render();
+}
+async function editAllocationNumber(txId){
+  const t=state.transactions.find(x=>x.id===txId);
+  if(!t) return;
+  const value=prompt('מספר הקצאה עבור תנועה זו (השאירו ריק כדי להסיר):', t.allocationNumber||'');
+  if(value===null) return;
+  t.allocationNumber=value.trim();
+  await dbPut('transactions',t);
+  render();
+}
+function updateManualAllocWarning(){
+  const amountEl=document.getElementById('tf-amount');
+  const dateEl=document.getElementById('tf-date');
+  const warnEl=document.getElementById('tf-alloc-warn');
+  if(!amountEl||!dateEl||!warnEl) return;
+  const amount=parseFloat(amountEl.value)||0;
+  const date=dateEl.value||todayISO();
+  if(amount>=allocationThreshold(date)){
+    warnEl.textContent=`⚠ מעל ${fmtMoney(allocationThreshold(date))} לתאריך זה — נדרש מספר הקצאה לחשבונית מס (ראו מדריך רשות המסים)`;
+    warnEl.style.display='block';
+  } else {
+    warnEl.style.display='none';
+  }
+}
+function updateExtractAllocWarning(scope){
+  const amountEl=document.getElementById(`ef-amount-${scope}`);
+  const dateEl=document.getElementById(`ef-date-${scope}`);
+  const warnEl=document.getElementById(`ef-alloc-warn-${scope}`);
+  if(!amountEl||!dateEl||!warnEl) return;
+  const amount=parseFloat(amountEl.value)||0;
+  const date=dateEl.value||todayISO();
+  if(amount>=allocationThreshold(date)){
+    warnEl.textContent=`⚠ מעל ${fmtMoney(allocationThreshold(date))} לתאריך זה — נדרש מספר הקצאה לחשבונית מס`;
+    warnEl.style.display='block';
+  } else {
+    warnEl.style.display='none';
+  }
 }
 async function viewReceipt(receiptId){
   const s=await tx('receipts','readonly');
@@ -1205,6 +1303,9 @@ function renderReports(){
       <div class="summary-card c-expense"><div class="num">${fmtMoney(expense)}</div><div class="lbl">הוצאות (כל הזמנים)</div></div>
       <div class="summary-card c-net"><div class="num ${income-expense>=0?'pos':'neg'}">${fmtMoney(income-expense)}</div><div class="lbl">מאזן כולל</div></div>
     </div>
+    ${(()=>{ const missing=txs.filter(t=>needsAllocation(t)&&!t.allocationNumber).length; return missing
+      ? `<div class="banner-warn" role="status" style="margin:14px 18px 0;">⚠ ${missing} תנועות בטווח זה מעל סף הדיווח המפורט (ראו מדריך רשות המסים) חסרות מספר הקצאה — ניתן להוסיף בכרטיס הספק/לקוח הרלוונטי.</div>`
+      : ''; })()}
 
     ${renderExportSection(monthly)}
 
@@ -1268,21 +1369,22 @@ function csvEscape(v){
 function isoToDDMMYYYY(iso){ const p=(iso||'').split('-'); return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : (iso||''); }
 function exportTransactionsCsv(txs, filenameBase){
   const rows=txs.slice().sort((a,b)=>a.date.localeCompare(b.date));
-  const header=['תאריך','שם ספק/לקוח','סוג ספק/לקוח','סוג תנועה','תיאור','סכום','יש קבלה מצורפת'];
+  const header=['תאריך','שם ספק/לקוח','מס\' עוסק/ח.פ','סוג ספק/לקוח','סוג תנועה','תיאור','סכום','מס\' הקצאה','חסר מס\' הקצאה נדרש','יש קבלה מצורפת'];
   const lines=[header];
   let income=0, expense=0;
   for(const t of rows){
     const c=state.contacts.find(x=>x.id===t.contactId);
     if(t.type==='income') income+=t.amount; else expense+=t.amount;
     lines.push([
-      isoToDDMMYYYY(t.date), c?c.name:'—', c?typeLabel(c.type):'',
-      t.type==='income'?'הכנסה':'הוצאה', t.description||'', t.amount.toFixed(2), t.receiptId?'כן':'לא'
+      isoToDDMMYYYY(t.date), c?c.name:'—', c?(c.businessId||''):'', c?typeLabel(c.type):'',
+      t.type==='income'?'הכנסה':'הוצאה', t.description||'', t.amount.toFixed(2),
+      t.allocationNumber||'', (needsAllocation(t)&&!t.allocationNumber)?'כן':'לא', t.receiptId?'כן':'לא'
     ]);
   }
   lines.push([]);
-  lines.push(['','','','','סה"כ הכנסות',income.toFixed(2),'']);
-  lines.push(['','','','','סה"כ הוצאות',expense.toFixed(2),'']);
-  lines.push(['','','','','מאזן',(income-expense).toFixed(2),'']);
+  lines.push(['','','','','','סה"כ הכנסות',income.toFixed(2),'','','']);
+  lines.push(['','','','','','סה"כ הוצאות',expense.toFixed(2),'','','']);
+  lines.push(['','','','','','מאזן',(income-expense).toFixed(2),'','','']);
   const csv=lines.map(r=>r.map(csvEscape).join(',')).join('\r\n');
   downloadBlob(`${filenameBase}.csv`, new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'}));
 }
@@ -1376,6 +1478,9 @@ document.getElementById('app').addEventListener('click', async (e)=>{
   else if(action==='delete-tx'){ await deleteTransaction(id); }
   else if(action==='view-receipt'){ await viewReceipt(id); }
   else if(action==='remove-receipt'){ await removeReceiptFromTx(id); }
+  else if(action==='edit-allocation'){ await editAllocationNumber(id); }
+  else if(action==='edit-contact'){ state.editContactId=id; render(); }
+  else if(action==='cancel-edit-contact'){ state.editContactId=null; render(); }
   else if(action==='attach-row'){ const inp=target.querySelector('input[type=file]'); if(inp) inp.click(); }
   else if(action==='export-backup'){ await exportBackup(); }
   else if(action==='export-month-csv'){ exportMonthCsv(); }
@@ -1392,6 +1497,7 @@ document.getElementById('app').addEventListener('keydown', async (e)=>{
 
 document.getElementById('app').addEventListener('submit', async (e)=>{
   if(e.target.id==='contactForm'){ e.preventDefault(); await addContact(e.target); }
+  else if(e.target.id==='editContactForm'){ e.preventDefault(); await updateContact(state.editContactId, e.target); }
   else if(e.target.id==='txForm'){ e.preventDefault(); await addTransaction(e.target); }
   else if(e.target.id==='scanForm'){ e.preventDefault(); await confirmScan(); }
   else if(e.target.id==='batchItemForm'){ e.preventDefault(); await approveBatchItem(); }
@@ -1406,8 +1512,10 @@ document.getElementById('app').addEventListener('input', (e)=>{
   else if(e.target.dataset.ef && e.target.tagName!=='SELECT'){
     const f=activeExtractForm(e.target.dataset.scope);
     if(f) f[e.target.dataset.ef]=e.target.value;
+    if(e.target.dataset.ef==='amount' || e.target.dataset.ef==='date') updateExtractAllocWarning(e.target.dataset.scope);
   }
   else if(e.target.dataset.split==='count'){ if(state.batch) state.batch.splitCount=Math.max(1,Math.min(20,parseInt(e.target.value,10)||1)); }
+  else if(e.target.id==='tf-amount' || e.target.id==='tf-date'){ updateManualAllocWarning(); }
 });
 
 document.getElementById('app').addEventListener('change', async (e)=>{
