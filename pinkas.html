@@ -5,17 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>פנקס · ספקים ולקוחות</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%82%AA%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700;900&family=Rubik:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --paper:      #EEF1F6;
-    --paper-line: #D8DEE7;
-    --surface:    #FFFFFF;
-    --ink:        #1B2430;
-    --ink-soft:   #5B6472;
-    --ink-faint:  #656E7B;
-    --brand:      #2B5D6B;
-    --brand-ink:  #1E4650;
-    --brand-soft: #DCE9EC;
+    --paper:      #F3F0E6;
+    --paper-line: #E0D9C6;
+    --surface:    #FFFEFB;
+    --ink:        #21190F;
+    --ink-soft:   #5C5646;
+    --ink-faint:  #6E6754;
+    --brand:      #1E3D5A;
+    --brand-ink:  #122840;
+    --brand-soft: #DCE6EE;
+    --gold:       #A6792B;
+    --gold-ink:   #8F661E;
+    --gold-soft:  #F3E7CB;
     --good:       #2D764E;
     --good-soft:  #E1F1E6;
     --warn:       #B4711B;
@@ -26,13 +32,13 @@
     --chart-income:  #2A78D6;
     --chart-expense: #E34948;
     --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-lg: 16px;
-    --shadow-sm: 0 1px 2px rgba(27,36,48,.06), 0 1px 1px rgba(27,36,48,.04);
-    --shadow-md: 0 6px 20px rgba(27,36,48,.08), 0 2px 6px rgba(27,36,48,.05);
-    --font-display: ui-serif, Georgia, "Noto Serif Hebrew", "Times New Roman", serif;
-    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Hebrew", Arial, sans-serif;
-    --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Courier New", monospace;
+    --radius-md: 9px;
+    --radius-lg: 13px;
+    --shadow-sm: 0 1px 2px rgba(33,25,15,.07), 0 1px 1px rgba(33,25,15,.05);
+    --shadow-md: 0 10px 26px rgba(33,25,15,.11), 0 3px 8px rgba(33,25,15,.07);
+    --font-display: "Frank Ruhl Libre", ui-serif, Georgia, "Noto Serif Hebrew", "Times New Roman", serif;
+    --font-body: "Rubik", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Hebrew", Arial, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Courier New", monospace;
   }
   *{ box-sizing:border-box; }
   html,body{ margin:0; padding:0; }
@@ -43,9 +49,10 @@
     color:var(--ink);
     font-family:var(--font-body);
     font-size:14px;
-    line-height:1.5;
+    line-height:1.55;
     min-height:100vh;
   }
+  h1,h2,h3,h4{ text-wrap:balance; }
   ::selection{ background:var(--brand-soft); color:var(--brand-ink); }
   button{ font-family:inherit; }
   input,select,textarea{ font-family:inherit; font-size:inherit; color:inherit; }
@@ -62,39 +69,45 @@
 
   .masthead{
     display:flex; align-items:flex-end; justify-content:space-between; gap:20px;
-    padding-bottom:18px; margin-bottom:16px; border-bottom:2px solid var(--ink);
+    padding-bottom:20px; margin-bottom:18px; border-bottom:3px double var(--ink);
   }
-  .masthead-title{ display:flex; align-items:baseline; gap:12px; }
-  .masthead h1{ font-family:var(--font-display); font-weight:700; font-size:26px; letter-spacing:.2px; margin:0; }
+  .masthead-title{ display:flex; align-items:center; gap:14px; }
+  .masthead h1{ font-family:var(--font-display); font-weight:900; font-size:30px; letter-spacing:.2px; margin:0; }
   .masthead .stamp-mark{
     display:inline-flex; align-items:center; justify-content:center;
-    width:30px; height:30px; border-radius:50%; border:2px solid var(--brand); color:var(--brand);
-    font-family:var(--font-display); font-weight:700; font-size:15px; transform:rotate(-8deg); flex:none;
+    width:44px; height:44px; border-radius:50%; border:2.5px solid var(--gold); color:var(--brand);
+    background:
+      radial-gradient(circle at 32% 28%, rgba(255,255,255,.55), transparent 55%),
+      var(--gold-soft);
+    box-shadow:0 2px 5px rgba(33,25,15,.18), inset 0 0 0 1px rgba(255,255,255,.4);
+    font-family:var(--font-display); font-weight:900; font-size:20px; transform:rotate(-7deg); flex:none;
   }
-  .masthead p{ margin:2px 0 0; color:var(--ink-soft); font-size:13px; }
+  .masthead p{ margin:3px 0 0; color:var(--ink-soft); font-size:13px; }
   .masthead-actions{ display:flex; gap:8px; flex:none; flex-wrap:wrap; justify-content:flex-end; max-width:420px; }
 
-  .nav-tabs{ display:flex; gap:6px; margin-bottom:16px; }
-  .nav-tab{ background:none; border:1px solid transparent; padding:8px 18px; border-radius:20px; font-size:12.5px; font-weight:700; color:var(--ink-soft); }
-  .nav-tab:hover{ background:var(--surface); border-color:var(--paper-line); }
-  .nav-tab.active{ background:var(--ink); color:#fff; }
+  .nav-tabs{ display:flex; gap:4px; margin-bottom:18px; border-bottom:1px solid var(--paper-line); }
+  .nav-tab{ position:relative; background:none; border:none; padding:10px 18px; font-size:12.5px; font-weight:700; color:var(--ink-soft); top:1px; }
+  .nav-tab:hover{ color:var(--ink); }
+  .nav-tab.active{ color:var(--brand-ink); }
+  .nav-tab.active::after{ content:''; position:absolute; right:14px; left:14px; bottom:-1px; height:3px; background:var(--gold); border-radius:3px 3px 0 0; }
 
   .card{ background:var(--surface); border:1px solid var(--paper-line); border-radius:var(--radius-lg); box-shadow:var(--shadow-sm); }
   .section-label{ font-family:var(--font-mono); text-transform:uppercase; letter-spacing:1.2px; font-size:11px; color:var(--ink-soft); font-weight:600; margin:0 0 10px; }
 
   .btn{
-    display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:20px;
+    display:inline-flex; align-items:center; gap:6px; padding:8px 15px; border-radius:var(--radius-md);
     border:1px solid var(--paper-line); background:var(--surface); font-size:12.5px; font-weight:600; color:var(--ink);
-    white-space:nowrap;
+    white-space:nowrap; transition:border-color .12s ease, background .12s ease, transform .12s ease, box-shadow .12s ease;
   }
   .btn:hover{ border-color:var(--ink-faint); }
-  .btn-primary{ background:var(--brand); border-color:var(--brand); color:#fff; }
-  .btn-primary:hover{ background:var(--brand-ink); border-color:var(--brand-ink); }
+  .btn:active{ transform:translateY(1px); }
+  .btn-primary{ background:var(--brand); border-color:var(--brand); color:#fff; box-shadow:0 1px 2px rgba(18,40,64,.25); }
+  .btn-primary:hover{ background:var(--brand-ink); border-color:var(--brand-ink); box-shadow:0 3px 8px rgba(18,40,64,.28); }
   .btn-ghost{ border-color:transparent; background:none; color:var(--ink-soft); }
   .btn-ghost:hover{ background:var(--paper); }
   .btn-danger{ color:var(--bad); }
   .btn-danger:hover{ background:var(--bad-soft); border-color:var(--bad); }
-  .btn-sm{ padding:5px 10px; font-size:11.5px; border-radius:16px; }
+  .btn-sm{ padding:5px 11px; font-size:11.5px; border-radius:var(--radius-sm); }
   .btn[disabled]{ opacity:.5; cursor:not-allowed; }
 
   .summary-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
@@ -114,13 +127,13 @@
   .spacer{ flex:1; }
   .sort-select{ padding:7px 10px; border:1px solid var(--paper-line); border-radius:var(--radius-sm); background:var(--surface); font-size:12px; }
 
-  .panel{ background:var(--surface); border:2px solid var(--ink); border-radius:var(--radius-lg); overflow:hidden; }
+  .panel{ background:var(--surface); border:1.5px solid var(--brand); border-radius:var(--radius-lg); box-shadow:var(--shadow-md); overflow:hidden; }
 
   table.data-table{ border-collapse:collapse; width:100%; font-size:12.5px; }
   table.data-table th, table.data-table td{ padding:10px 14px; text-align:right; border-bottom:1px solid var(--paper-line); }
   table.data-table thead th{
-    font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-soft);
-    border-bottom:2px solid var(--ink); font-weight:700;
+    font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-soft);
+    border-bottom:2px solid var(--brand); font-weight:600;
   }
   table.data-table tbody tr{ cursor:pointer; }
   table.data-table tbody tr:hover{ background:var(--paper); }
