@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>פנקס · ספקים ולקוחות</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%82%AA%3C/text%3E%3C/svg%3E">
 <style>
   :root{
     --paper:      #EEF1F6;
@@ -11,16 +12,19 @@
     --surface:    #FFFFFF;
     --ink:        #1B2430;
     --ink-soft:   #5B6472;
-    --ink-faint:  #8A93A3;
+    --ink-faint:  #656E7B;
     --brand:      #2B5D6B;
     --brand-ink:  #1E4650;
     --brand-soft: #DCE9EC;
-    --good:       #2F7D4F;
+    --good:       #2D764E;
     --good-soft:  #E1F1E6;
     --warn:       #B4711B;
+    --warn-ink:   #985B16;
     --warn-soft:  #FBEBD6;
     --bad:        #B23A3A;
     --bad-soft:   #FAE4E2;
+    --chart-income:  #2A78D6;
+    --chart-expense: #E34948;
     --radius-sm: 6px;
     --radius-md: 10px;
     --radius-lg: 16px;
@@ -49,9 +53,16 @@
   :focus-visible{ outline:2px solid var(--brand); outline-offset:2px; border-radius:4px; }
   #app{ width:min(1180px,96vw); margin:0 auto; padding:18px 12px 40px; }
 
+  .visually-hidden{ position:absolute!important; width:1px;height:1px; padding:0;margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  .skip-link{
+    position:absolute; right:8px; top:-46px; background:var(--ink); color:#fff; padding:10px 16px;
+    border-radius:8px; z-index:200; transition:top .15s ease; text-decoration:none; font-size:13px; font-weight:700;
+  }
+  .skip-link:focus{ top:8px; }
+
   .masthead{
     display:flex; align-items:flex-end; justify-content:space-between; gap:20px;
-    padding-bottom:18px; margin-bottom:22px; border-bottom:2px solid var(--ink);
+    padding-bottom:18px; margin-bottom:16px; border-bottom:2px solid var(--ink);
   }
   .masthead-title{ display:flex; align-items:baseline; gap:12px; }
   .masthead h1{ font-family:var(--font-display); font-weight:700; font-size:26px; letter-spacing:.2px; margin:0; }
@@ -61,10 +72,15 @@
     font-family:var(--font-display); font-weight:700; font-size:15px; transform:rotate(-8deg); flex:none;
   }
   .masthead p{ margin:2px 0 0; color:var(--ink-soft); font-size:13px; }
-  .masthead-actions{ display:flex; gap:8px; flex:none; }
+  .masthead-actions{ display:flex; gap:8px; flex:none; flex-wrap:wrap; justify-content:flex-end; max-width:420px; }
+
+  .nav-tabs{ display:flex; gap:6px; margin-bottom:16px; }
+  .nav-tab{ background:none; border:1px solid transparent; padding:8px 18px; border-radius:20px; font-size:12.5px; font-weight:700; color:var(--ink-soft); }
+  .nav-tab:hover{ background:var(--surface); border-color:var(--paper-line); }
+  .nav-tab.active{ background:var(--ink); color:#fff; }
 
   .card{ background:var(--surface); border:1px solid var(--paper-line); border-radius:var(--radius-lg); box-shadow:var(--shadow-sm); }
-  .section-label{ font-family:var(--font-mono); text-transform:uppercase; letter-spacing:1.2px; font-size:11px; color:var(--ink-faint); font-weight:600; margin:0 0 10px; }
+  .section-label{ font-family:var(--font-mono); text-transform:uppercase; letter-spacing:1.2px; font-size:11px; color:var(--ink-soft); font-weight:600; margin:0 0 10px; }
 
   .btn{
     display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:20px;
@@ -79,7 +95,7 @@
   .btn-danger{ color:var(--bad); }
   .btn-danger:hover{ background:var(--bad-soft); border-color:var(--bad); }
   .btn-sm{ padding:5px 10px; font-size:11.5px; border-radius:16px; }
-  .btn[disabled]{ opacity:.4; cursor:not-allowed; }
+  .btn[disabled]{ opacity:.5; cursor:not-allowed; }
 
   .summary-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
   @media (max-width:800px){ .summary-row{ grid-template-columns:repeat(2,1fr); } }
@@ -111,10 +127,11 @@
   table.data-table td.numeric{ font-family:var(--font-mono); direction:ltr; text-align:left; font-variant-numeric:tabular-nums; }
   table.data-table td.numeric.pos{ color:var(--good); }
   table.data-table td.numeric.neg{ color:var(--bad); }
+  .table-scroll-x{ overflow-x:auto; }
   .type-pill{ display:inline-flex; padding:2px 9px; border-radius:20px; font-size:11px; font-weight:700; background:var(--brand-soft); color:var(--brand-ink); }
   .type-pill.t-customer{ background:var(--good-soft); color:var(--good); }
   .type-pill.t-supplier{ background:var(--bad-soft); color:var(--bad); }
-  .type-pill.t-both{ background:var(--warn-soft); color:var(--warn); }
+  .type-pill.t-both{ background:var(--warn-soft); color:var(--warn-ink); }
 
   .empty-state{ padding:60px 30px; text-align:center; color:var(--ink-soft); }
   .empty-state .es-icon{ margin-bottom:14px; color:var(--ink-faint); font-size:34px; }
@@ -130,14 +147,16 @@
   .field input, .field select, .field textarea{
     padding:8px 10px; border:1px solid var(--paper-line); border-radius:var(--radius-sm); background:var(--surface); font-size:12.5px;
   }
-  .form-actions{ display:flex; gap:8px; margin-top:12px; }
+  .field.not-detected input, .field.not-detected select{ border-color:var(--warn); background:var(--warn-soft); }
+  .field-hint-warn{ font-size:11px; color:var(--warn-ink); font-weight:700; }
+  .form-actions{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center; }
   .type-toggle{ display:flex; border:1px solid var(--paper-line); border-radius:var(--radius-sm); overflow:hidden; }
   .type-toggle button{ flex:1; padding:8px 10px; border:none; background:var(--surface); font-size:12.5px; font-weight:700; }
   .type-toggle button.active.tt-income{ background:var(--good); color:#fff; }
   .type-toggle button.active.tt-expense{ background:var(--bad); color:#fff; }
 
   .detail-head{ display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; padding:16px 18px; border-bottom:1px solid var(--paper-line); }
-  .detail-title{ display:flex; align-items:center; gap:12px; }
+  .detail-title{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
   .detail-title h2{ font-family:var(--font-display); font-size:19px; margin:0; }
   .balance-badge{ font-family:var(--font-mono); font-weight:700; font-size:18px; padding:6px 16px; border-radius:20px; direction:ltr; }
   .balance-badge.pos{ background:var(--good-soft); color:var(--good); }
@@ -145,37 +164,81 @@
   .balance-badge.zero{ background:var(--paper); color:var(--ink-soft); }
 
   .receipt-pill{ display:inline-flex; align-items:center; gap:5px; background:var(--brand-soft); color:var(--brand-ink); padding:3px 6px 3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
-  .receipt-pill button{ background:none; border:none; color:var(--brand-ink); opacity:.6; font-size:13px; padding:0 2px; }
+  .receipt-pill button{ background:none; border:none; color:var(--brand-ink); opacity:.75; font-size:13px; padding:0 2px; }
   .attach-drop{
-    display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:16px; border:1.4px dashed var(--paper-line);
+    position:relative; display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:16px; border:1.4px dashed var(--paper-line);
     color:var(--ink-faint); font-size:11px; font-weight:600; cursor:pointer;
   }
   .attach-drop:hover, .attach-drop.drag-over{ border-color:var(--brand); color:var(--brand-ink); background:var(--brand-soft); }
+  .sr-file-input{ position:absolute; inset:0; opacity:0; width:100%; height:100%; cursor:pointer; margin:0; }
 
-  .footer-note{ text-align:center; color:var(--ink-faint); font-size:11.5px; margin-top:26px; }
+  .upload-zone{
+    position:relative; display:block; border:2px dashed var(--paper-line); border-radius:var(--radius-lg);
+    padding:44px 20px; text-align:center; color:var(--ink-soft); margin:18px; cursor:pointer;
+  }
+  .upload-zone.drag-over{ border-color:var(--brand); background:var(--brand-soft); }
+  .upload-zone .uz-icon{ font-size:36px; margin-bottom:10px; }
+  .upload-zone .dz-empty-title{ font-weight:700; color:var(--ink); }
+  .upload-zone .dz-empty-sub{ font-size:12px; margin-top:4px; }
+
+  .banner-warn{ background:var(--warn-soft); color:var(--warn-ink); border:1px solid var(--warn); border-radius:var(--radius-md); padding:14px 16px; margin:14px 18px; font-size:12.5px; line-height:1.7; }
+
+  .progress-wrap{ margin:0 0 10px; }
+  .progress-track{ height:8px; background:var(--paper-line); border-radius:8px; overflow:hidden; }
+  .progress-fill.indet{ height:100%; width:34%; background:var(--brand); border-radius:8px; animation:pinkas-indet 1.1s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce){ .progress-fill.indet{ animation:none; width:60%; } }
+  @keyframes pinkas-indet{ 0%{ margin-inline-start:0%; } 50%{ margin-inline-start:64%; } 100%{ margin-inline-start:0%; } }
+  .progress-text{ font-size:12.5px; color:var(--ink-soft); }
+
+  .review-grid{ display:grid; grid-template-columns:260px 1fr; gap:20px; padding:18px; align-items:start; }
+  @media (max-width:760px){ .review-grid{ grid-template-columns:1fr; } }
+  .review-preview{ border:1px solid var(--paper-line); border-radius:var(--radius-md); overflow:hidden; background:var(--paper); min-height:120px; display:flex; align-items:center; justify-content:center; }
+  .review-preview img{ width:100%; display:block; }
+  .raw-text-box{ margin-top:16px; }
+  .raw-text-box summary{ cursor:pointer; font-size:12px; font-weight:700; color:var(--brand-ink); }
+  .raw-text-box textarea{ width:100%; min-height:110px; margin-top:8px; font-family:var(--font-mono); font-size:11.5px; direction:ltr; text-align:left; padding:8px; border:1px solid var(--paper-line); border-radius:var(--radius-sm); background:var(--surface); resize:vertical; }
+
+  .queue-progress{ padding:10px 18px; border-bottom:1px solid var(--paper-line); font-size:12.5px; color:var(--ink-soft); background:var(--paper); }
+
+  .chart-svg{ width:100%; height:auto; margin-bottom:8px; }
+  .chart-axis-label{ font-family:var(--font-mono); font-size:9.5px; fill:var(--ink-soft); }
+  .chart-grid{ stroke:var(--paper-line); stroke-width:1; }
+  .chart-grid-zero{ stroke:var(--ink-faint); stroke-width:1; stroke-dasharray:3 3; }
+  .chart-legend{ display:flex; gap:16px; margin-bottom:8px; font-size:11.5px; color:var(--ink-soft); }
+  .legend-item{ display:inline-flex; align-items:center; gap:6px; }
+  .legend-swatch{ width:11px; height:11px; border-radius:3px; display:inline-block; }
+  .chart-empty{ color:var(--ink-soft); font-size:12.5px; padding:14px 0; }
+  .report-section-title{ font-family:var(--font-display); font-size:15px; margin:22px 0 10px; }
+  .report-section-title:first-child{ margin-top:0; }
+
+  .footer-note{ text-align:center; color:var(--ink-soft); font-size:11.5px; margin-top:26px; }
   @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
 </style>
 </head>
 <body>
+<a href="#mainContent" class="skip-link">דלג לתוכן הראשי</a>
 <div id="app">
   <header class="masthead">
     <div class="masthead-title">
-      <span class="stamp-mark">₪</span>
+      <span class="stamp-mark" aria-hidden="true">₪</span>
       <div>
         <h1>פנקס</h1>
         <p>ספקים ולקוחות · הכנסות, הוצאות וקבלות במקום אחד — הכל בדפדפן שלך, בלי אינטרנט, בחינם</p>
       </div>
     </div>
     <div class="masthead-actions">
+      <button class="btn btn-sm" data-action="open-scan">📷 סריקת קבלה</button>
+      <button class="btn btn-sm" data-action="open-batch">📚 ייבוא קבוצתי</button>
       <button class="btn btn-sm" data-action="export-backup">⭳ גיבוי</button>
       <button class="btn btn-sm" data-action="trigger-import">⭱ שחזור</button>
     </div>
   </header>
-  <div id="view"></div>
-  <p class="footer-note">כל הנתונים נשמרים מקומית בדפדפן שלך בלבד (IndexedDB) — שום דבר לא נשלח לשרת</p>
+  <main id="mainContent">
+    <div id="view"></div>
+  </main>
+  <p class="footer-note">כל הנתונים, כולל תמונות הקבלות, נשמרים מקומית בדפדפן שלך בלבד (IndexedDB) — שום דבר לא נשלח לשרת</p>
 </div>
-<input type="file" id="importInput" accept="application/json" hidden>
-<input type="file" id="receiptPicker" hidden>
+<input type="file" id="importInput" accept="application/json" aria-label="בחירת קובץ גיבוי לשחזור" hidden>
 
 <script>
 (function(){
@@ -210,7 +273,7 @@ async function dbClear(storeName){ const s=await tx(storeName,'readwrite'); retu
 
 /* ============================= STATE ============================= */
 const state={
-  view:'dashboard',      // 'dashboard' | 'contact'
+  view:'dashboard',      // dashboard | contact | reports | scan | batch
   contactId:null,
   contacts:[],
   transactions:[],
@@ -220,7 +283,10 @@ const state={
   showAddContact:false,
   showAddTx:false,
   txType:'income',
-  pendingReceiptFile:null
+  pendingReceiptFile:null,
+  reportsContactId:'all',
+  scan:null,
+  batch:null
 };
 
 function uid(){ return (crypto.randomUUID? crypto.randomUUID() : 'id-'+Date.now()+'-'+Math.random().toString(16).slice(2)); }
@@ -228,6 +294,7 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;'
 function fmtMoney(n){ return new Intl.NumberFormat('he-IL',{style:'currency',currency:'ILS',maximumFractionDigits:2}).format(n||0); }
 function fmtDate(d){ if(!d) return ''; const dt=new Date(d); if(isNaN(dt)) return esc(d); return dt.toLocaleDateString('he-IL'); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
+function round2(n){ return Math.round(n*100)/100; }
 
 function typeLabel(t){ return t==='supplier'?'ספק':t==='customer'?'לקוח':'ספק ולקוח'; }
 function typeClass(t){ return t==='supplier'?'t-supplier':t==='customer'?'t-customer':'t-both'; }
@@ -245,6 +312,14 @@ function totals(){
   const expense=state.transactions.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
   return {income,expense,net:income-expense,contacts:state.contacts.length};
 }
+function findMatchingContact(name){
+  if(!name) return null;
+  const n=name.trim().toLowerCase();
+  if(n.length<2) return null;
+  return state.contacts.find(c=>c.name.toLowerCase()===n)
+      || state.contacts.find(c=>c.name.toLowerCase().includes(n) || n.includes(c.name.toLowerCase()))
+      || null;
+}
 
 /* ============================= LOAD ============================= */
 async function loadAll(){
@@ -256,12 +331,38 @@ async function loadAll(){
   render();
 }
 
-/* ============================= RENDER ============================= */
+/* ============================= RENDER SHELL ============================= */
 function render(){
   const el=document.getElementById('view');
-  el.innerHTML = state.view==='contact' ? renderContactView() : renderDashboard();
+  let html;
+  try{
+    if(state.view==='contact') html=renderContactView();
+    else if(state.view==='reports') html=renderReports();
+    else if(state.view==='scan') html=renderScanView();
+    else if(state.view==='batch') html=renderBatchView();
+    else html=renderDashboard();
+  }catch(err){
+    console.error('render error', err);
+    el.innerHTML = renderNavTabs()+`<div class="panel"><div class="empty-state"><div class="es-icon" aria-hidden="true">⚠</div><h3>אירעה שגיאה בהצגת המסך</h3><p>${esc(err&&err.message||'')}</p><p><button class="btn btn-primary btn-sm" data-action="nav-dashboard">חזרה ללוח הבקרה</button></p></div></div>`;
+    return;
+  }
+  el.innerHTML = renderNavTabs()+html;
+}
+function renderNavTabs(){
+  const dashActive = state.view==='dashboard' || state.view==='contact' || state.view==='scan' || state.view==='batch';
+  return `<nav class="nav-tabs" aria-label="ניווט ראשי">
+    <button class="nav-tab ${dashActive?'active':''}" data-action="nav-dashboard" ${dashActive?'aria-current="page"':''}>לוח בקרה</button>
+    <button class="nav-tab ${state.view==='reports'?'active':''}" data-action="nav-reports" ${state.view==='reports'?'aria-current="page"':''}>דוחות ומאזנים</button>
+  </nav>`;
+}
+function focusRegion(){
+  requestAnimationFrame(()=>{
+    const heading=document.querySelector('#view h2');
+    if(heading){ heading.setAttribute('tabindex','-1'); heading.focus({preventScroll:false}); }
+  });
 }
 
+/* ============================= DASHBOARD ============================= */
 function renderDashboard(){
   const t=totals();
   const q=state.search.trim().toLowerCase();
@@ -282,9 +383,11 @@ function renderDashboard(){
       ${state.showAddContact ? renderAddContactForm() : ''}
       <div class="toolbar">
         <div class="search-box">
+          <label for="searchInput" class="visually-hidden">חיפוש ספקים ולקוחות</label>
           <input type="text" id="searchInput" placeholder="חיפוש לפי שם, טלפון או הערה…" value="${esc(state.search)}">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         </div>
+        <label for="sortSelect" class="visually-hidden">מיון רשימת ספקים ולקוחות</label>
         <select class="sort-select" id="sortSelect">
           <option value="name" ${state.sortBy==='name'?'selected':''}>מיון: שם</option>
           <option value="balance" ${state.sortBy==='balance'?'selected':''}>מיון: מאזן</option>
@@ -294,28 +397,30 @@ function renderDashboard(){
         <button class="btn btn-primary btn-sm" data-action="toggle-add-contact">${state.showAddContact?'✕ ביטול':'+ ספק/לקוח חדש'}</button>
       </div>
       ${rows.length===0 ? renderEmptyContacts(q) : `
+      <div class="table-scroll-x">
       <table class="data-table">
-        <thead><tr><th>שם</th><th>סוג</th><th>הכנסות</th><th>הוצאות</th><th>מאזן</th><th></th></tr></thead>
+        <thead><tr><th>שם</th><th>סוג</th><th>הכנסות</th><th>הוצאות</th><th>מאזן</th><th><span class="visually-hidden">פעולות</span></th></tr></thead>
         <tbody>
           ${rows.map(({c,b})=>`
             <tr data-action="open-contact" data-id="${c.id}">
-              <td><strong>${esc(c.name)}</strong>${c.phone?`<div style="color:var(--ink-faint);font-size:11px;margin-top:2px">${esc(c.phone)}</div>`:''}</td>
+              <td><strong>${esc(c.name)}</strong>${c.phone?`<div style="color:var(--ink-soft);font-size:11px;margin-top:2px">${esc(c.phone)}</div>`:''}</td>
               <td><span class="type-pill ${typeClass(c.type)}">${typeLabel(c.type)}</span></td>
               <td class="numeric pos">${fmtMoney(b.income)}</td>
               <td class="numeric neg">${fmtMoney(b.expense)}</td>
               <td class="numeric ${b.net>0?'pos':b.net<0?'neg':''}">${fmtMoney(b.net)}</td>
-              <td><button class="btn btn-ghost btn-sm" data-action="delete-contact" data-id="${c.id}" title="מחיקה">🗑</button></td>
+              <td><button class="btn btn-ghost btn-sm" data-action="delete-contact" data-id="${c.id}" aria-label="מחיקת ${esc(c.name)}" title="מחיקה">🗑</button></td>
             </tr>`).join('')}
         </tbody>
-      </table>`}
+      </table>
+      </div>`}
     </div>`;
 }
 
 function renderEmptyContacts(hasSearch){
   return `<div class="empty-state">
-    <div class="es-icon">📇</div>
+    <div class="es-icon" aria-hidden="true">📇</div>
     <h3>${hasSearch?'לא נמצאו תוצאות':'עדיין אין ספקים או לקוחות'}</h3>
-    <p>${hasSearch?'נסה מונח חיפוש אחר.':'לחצו על "ספק/לקוח חדש" כדי להתחיל לנהל הכנסות והוצאות.'}</p>
+    <p>${hasSearch?'נסה מונח חיפוש אחר.':'לחצו על "ספק/לקוח חדש" כדי להתחיל לנהל הכנסות והוצאות, או סרקו קבלה כדי ליצור אחד אוטומטית.'}</p>
   </div>`;
 }
 
@@ -324,16 +429,16 @@ function renderAddContactForm(){
     <h4>הוספת ספק / לקוח</h4>
     <form id="contactForm">
       <div class="form-grid">
-        <div class="field"><label>שם *</label><input type="text" name="name" required autofocus></div>
-        <div class="field"><label>סוג</label>
-          <select name="type">
+        <div class="field"><label for="cf-name">שם *</label><input id="cf-name" type="text" name="name" required autofocus></div>
+        <div class="field"><label for="cf-type">סוג</label>
+          <select id="cf-type" name="type">
             <option value="customer">לקוח</option>
             <option value="supplier">ספק</option>
             <option value="both">ספק ולקוח</option>
           </select>
         </div>
-        <div class="field"><label>טלפון</label><input type="text" name="phone"></div>
-        <div class="field"><label>הערה</label><input type="text" name="notes"></div>
+        <div class="field"><label for="cf-phone">טלפון</label><input id="cf-phone" type="text" name="phone"></div>
+        <div class="field"><label for="cf-notes">הערה</label><input id="cf-notes" type="text" name="notes"></div>
       </div>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary btn-sm">שמירה</button>
@@ -343,6 +448,7 @@ function renderAddContactForm(){
   </div>`;
 }
 
+/* ============================= CONTACT DETAIL ============================= */
 function renderContactView(){
   const c=state.contacts.find(x=>x.id===state.contactId);
   if(!c){ state.view='dashboard'; return renderDashboard(); }
@@ -354,7 +460,7 @@ function renderContactView(){
     <div class="panel">
       <div class="detail-head">
         <div class="detail-title">
-          <button class="btn btn-ghost btn-sm" data-action="back">→ חזרה</button>
+          <button class="btn btn-ghost btn-sm" data-action="nav-dashboard" aria-label="חזרה ללוח הבקרה">→ חזרה</button>
           <h2>${esc(c.name)}</h2>
           <span class="type-pill ${typeClass(c.type)}">${typeLabel(c.type)}</span>
         </div>
@@ -366,16 +472,19 @@ function renderContactView(){
       </div>
       <div class="toolbar" style="border-bottom:none;">
         <div class="spacer"></div>
-        <button class="btn btn-primary btn-sm" data-action="toggle-add-tx">${state.showAddTx?'✕ ביטול':'+ תנועה חדשה'}</button>
+        <button class="btn btn-sm" data-action="open-scan">📷 סריקת קבלה עבור ${esc(c.name)}</button>
+        <button class="btn btn-primary btn-sm" data-action="toggle-add-tx">${state.showAddTx?'✕ ביטול':'+ תנועה ידנית'}</button>
       </div>
       ${state.showAddTx ? renderAddTxForm() : ''}
-      ${rows.length===0 ? `<div class="empty-state"><div class="es-icon">🧾</div><h3>אין עדיין תנועות</h3><p>הוסיפו הכנסה או הוצאה כדי להתחיל לעקוב אחרי המאזן.</p></div>` : `
+      ${rows.length===0 ? `<div class="empty-state"><div class="es-icon" aria-hidden="true">🧾</div><h3>אין עדיין תנועות</h3><p>הוסיפו הכנסה או הוצאה, או סרקו קבלה, כדי להתחיל לעקוב אחרי המאזן.</p></div>` : `
+      <div class="table-scroll-x">
       <table class="data-table">
-        <thead><tr><th>תאריך</th><th>תיאור</th><th>סוג</th><th>סכום</th><th>קבלה</th><th></th></tr></thead>
+        <thead><tr><th>תאריך</th><th>תיאור</th><th>סוג</th><th>סכום</th><th>קבלה</th><th><span class="visually-hidden">פעולות</span></th></tr></thead>
         <tbody>
           ${rows.map(t=>renderTxRow(t)).join('')}
         </tbody>
-      </table>`}
+      </table>
+      </div>`}
     </div>`;
 }
 
@@ -388,16 +497,16 @@ function renderAddTxForm(){
         <button type="button" class="tt-expense ${state.txType==='expense'?'active':''}" data-action="set-tx-type" data-type="expense">↗ הוצאה</button>
       </div>
       <div class="form-grid">
-        <div class="field"><label>סכום (₪) *</label><input type="number" name="amount" step="0.01" min="0.01" required></div>
-        <div class="field"><label>תאריך *</label><input type="date" name="date" value="${todayISO()}" required></div>
-        <div class="field" style="grid-column:span 2;"><label>תיאור</label><input type="text" name="description" placeholder="לדוגמה: חשבונית 1042"></div>
+        <div class="field"><label for="tf-amount">סכום (₪) *</label><input id="tf-amount" type="number" name="amount" step="0.01" min="0.01" required></div>
+        <div class="field"><label for="tf-date">תאריך *</label><input id="tf-date" type="date" name="date" value="${todayISO()}" required></div>
+        <div class="field" style="grid-column:span 2;"><label for="tf-desc">תיאור</label><input id="tf-desc" type="text" name="description" placeholder="לדוגמה: חשבונית 1042"></div>
       </div>
-      <div class="form-actions" style="align-items:center;flex-wrap:wrap;">
+      <div class="form-actions">
         <button type="submit" class="btn btn-primary btn-sm">שמירה</button>
         <button type="button" class="btn btn-ghost btn-sm" data-action="toggle-add-tx">ביטול</button>
         <label class="attach-drop" id="newTxAttach">
           📎 <span id="newTxAttachLabel">${state.pendingReceiptFile?esc(state.pendingReceiptFile.name):'צירוף קבלה (אופציונלי)'}</span>
-          <input type="file" id="newTxFile" style="display:none">
+          <input type="file" id="newTxFile" class="sr-file-input" aria-label="צירוף קבלה לתנועה">
         </label>
       </div>
     </form>
@@ -407,19 +516,532 @@ function renderAddTxForm(){
 function renderTxRow(t){
   const meta=state.receiptsMeta[t.receiptId];
   const receiptCell = meta
-    ? `<span class="receipt-pill" title="${esc(meta.fileName)}">📎 <span data-action="view-receipt" data-id="${t.receiptId}" style="cursor:pointer;">קבלה</span><button data-action="remove-receipt" data-id="${t.id}" title="הסרה">✕</button></span>`
-    : `<label class="attach-drop" data-action="attach-row" data-id="${t.id}">📎 צירוף<input type="file" data-row-file="${t.id}" style="display:none"></label>`;
+    ? `<span class="receipt-pill" title="${esc(meta.fileName)}">📎 <span data-action="view-receipt" data-id="${t.receiptId}" style="cursor:pointer;" role="button" tabindex="0">קבלה</span><button data-action="remove-receipt" data-id="${t.id}" aria-label="הסרת קבלה" title="הסרה">✕</button></span>`
+    : `<label class="attach-drop" data-action="attach-row" data-id="${t.id}">📎 צירוף<input type="file" data-row-file="${t.id}" class="sr-file-input" aria-label="צירוף קבלה לתנועה מתאריך ${fmtDate(t.date)}"></label>`;
   return `<tr data-tx-row="${t.id}">
     <td>${fmtDate(t.date)}</td>
     <td>${esc(t.description||'—')}</td>
     <td><span class="type-pill ${t.type==='income'?'t-customer':'t-supplier'}">${t.type==='income'?'הכנסה':'הוצאה'}</span></td>
     <td class="numeric ${t.type==='income'?'pos':'neg'}">${t.type==='income'?'+':'-'}${fmtMoney(t.amount)}</td>
     <td>${receiptCell}</td>
-    <td><button class="btn btn-ghost btn-sm" data-action="delete-tx" data-id="${t.id}" title="מחיקה">🗑</button></td>
+    <td><button class="btn btn-ghost btn-sm" data-action="delete-tx" data-id="${t.id}" aria-label="מחיקת תנועה" title="מחיקה">🗑</button></td>
   </tr>`;
 }
 
-/* ============================= ACTIONS ============================= */
+/* ============================= SHARED: EXTRACTED-FIELDS FORM ============================= */
+function emptyParsed(){ return { amount:{value:null,confidence:'none'}, date:{value:null,confidence:'none'}, vendor:{value:null,confidence:'none'} }; }
+
+function renderExtractFields(scope, form, parsed){
+  const notAmount = parsed.amount.confidence==='none';
+  const notDate = parsed.date.confidence==='none';
+  const notVendor = parsed.vendor.confidence==='none';
+  const contactsSorted = state.contacts.slice().sort((a,b)=>a.name.localeCompare(b.name,'he'));
+  return `
+    <div class="form-grid" style="grid-template-columns:1fr 1fr;">
+      <div class="field">
+        <label for="ef-contact-${scope}">ספק / לקוח *</label>
+        <select id="ef-contact-${scope}" data-ef="contactSel" data-scope="${scope}">
+          <option value="__new__" ${form.contactSel==='__new__'?'selected':''}>➕ ספק/לקוח חדש…</option>
+          ${contactsSorted.map(c=>`<option value="${c.id}" ${form.contactSel===c.id?'selected':''}>${esc(c.name)} · ${typeLabel(c.type)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <span id="ef-typelabel-${scope}">סוג תנועה</span>
+        <div class="type-toggle" role="group" aria-labelledby="ef-typelabel-${scope}">
+          <button type="button" class="tt-income ${form.type==='income'?'active':''}" data-action="ef-set-type" data-scope="${scope}" data-type="income">↙ הכנסה</button>
+          <button type="button" class="tt-expense ${form.type==='expense'?'active':''}" data-action="ef-set-type" data-scope="${scope}" data-type="expense">↗ הוצאה</button>
+        </div>
+      </div>
+      ${form.contactSel==='__new__' ? `
+      <div class="field ${notVendor?'not-detected':''}">
+        <label for="ef-newname-${scope}">שם הספק/לקוח החדש *</label>
+        <input id="ef-newname-${scope}" type="text" data-ef="newContactName" data-scope="${scope}" value="${esc(form.newContactName)}" required>
+        ${notVendor?`<span class="field-hint-warn">⚠ לא זוהה אוטומטית — נא להזין</span>`:''}
+      </div>
+      <div class="field">
+        <label for="ef-newtype-${scope}">סוג ספק/לקוח</label>
+        <select id="ef-newtype-${scope}" data-ef="newContactType" data-scope="${scope}">
+          <option value="supplier" ${form.newContactType==='supplier'?'selected':''}>ספק</option>
+          <option value="customer" ${form.newContactType==='customer'?'selected':''}>לקוח</option>
+          <option value="both" ${form.newContactType==='both'?'selected':''}>ספק ולקוח</option>
+        </select>
+      </div>` : ''}
+      <div class="field ${notAmount?'not-detected':''}">
+        <label for="ef-amount-${scope}">סכום (₪) *</label>
+        <input id="ef-amount-${scope}" type="number" step="0.01" min="0.01" data-ef="amount" data-scope="${scope}" value="${esc(form.amount)}" required>
+        ${notAmount?`<span class="field-hint-warn">⚠ לא זוהה אוטומטית — נא להזין</span>`:''}
+      </div>
+      <div class="field ${notDate?'not-detected':''}">
+        <label for="ef-date-${scope}">תאריך *</label>
+        <input id="ef-date-${scope}" type="date" data-ef="date" data-scope="${scope}" value="${esc(form.date)}" required>
+        ${notDate?`<span class="field-hint-warn">⚠ לא זוהה אוטומטית — נא לבדוק</span>`:''}
+      </div>
+      <div class="field" style="grid-column:span 2;">
+        <label for="ef-desc-${scope}">תיאור</label>
+        <input id="ef-desc-${scope}" type="text" data-ef="description" data-scope="${scope}" value="${esc(form.description)}">
+      </div>
+    </div>`;
+}
+function activeExtractForm(scope){
+  if(scope==='scan') return state.scan && state.scan.form;
+  if(scope==='batch') return state.batch && state.batch.queue[state.batch.index] && state.batch.queue[state.batch.index].form;
+  return null;
+}
+function activeParsed(scope){
+  if(scope==='scan') return state.scan && state.scan.parsed;
+  if(scope==='batch') return state.batch && state.batch.queue[state.batch.index] && state.batch.queue[state.batch.index].parsed;
+  return null;
+}
+
+/* ============================= OCR / EXTRACTION ENGINE ============================= */
+const FILE_PROTOCOL_NOTE = 'הקובץ נפתח ישירות מהדיסק (לא דרך אתר/שרת), ולכן זיהוי אוטומטי של קבלות אינו זמין בדפדפן מטעמי אבטחה (הדפדפן חוסם הרצת מנוע OCR מקובץ מקומי). ניתן עדיין לצרף את הקבלה ולמלא את הפרטים ידנית — או להפעיל את פנקס דרך שרת מקומי / אחסון כמו GitHub Pages כדי להפעיל את הזיהוי האוטומטי.';
+
+let vendorLoadPromise=null;
+function loadScriptOnce(src){
+  return new Promise((resolve,reject)=>{
+    if(document.querySelector(`script[data-vendor-src="${src}"]`)){ resolve(); return; }
+    const s=document.createElement('script');
+    s.src=src; s.dataset.vendorSrc=src;
+    s.onload=()=>resolve();
+    s.onerror=()=>reject(new Error('טעינת ספריית עזר נכשלה ('+src+')'));
+    document.head.appendChild(s);
+  });
+}
+async function ensureOcrEngines(){
+  if(vendorLoadPromise) return vendorLoadPromise;
+  vendorLoadPromise=(async()=>{
+    if(!window.pdfjsLib) await loadScriptOnce('vendor/pdfjs/pdf.min.js');
+    if(window.pdfjsLib) window.pdfjsLib.GlobalWorkerOptions.workerSrc='vendor/pdfjs/pdf.worker.min.js';
+    if(!window.Tesseract) await loadScriptOnce('vendor/tesseract/tesseract.min.js');
+  })();
+  return vendorLoadPromise;
+}
+
+let tesseractWorkerPromise=null;
+let activeProgressHandler=null;
+async function getTesseractWorker(){
+  await ensureOcrEngines();
+  if(!tesseractWorkerPromise){
+    tesseractWorkerPromise=window.Tesseract.createWorker(['heb','eng'],1,{
+      workerPath:'vendor/tesseract/worker.min.js',
+      corePath:'vendor/tesseract/tesseract-core-simd-lstm.wasm.js',
+      langPath:'vendor/tesseract/lang',
+      gzip:true,
+      logger:(m)=>{ if(activeProgressHandler) activeProgressHandler(m); }
+    });
+  }
+  return tesseractWorkerPromise;
+}
+async function ocrImage(source, onPercent){
+  const worker=await getTesseractWorker();
+  activeProgressHandler=(m)=>{ if(onPercent && m && m.status==='recognizing text') onPercent(Math.round((m.progress||0)*100)); };
+  try{
+    const { data } = await worker.recognize(source);
+    return (data && data.text) || '';
+  } finally {
+    activeProgressHandler=null;
+  }
+}
+function buildTextWithLineBreaks(items){
+  let text=''; let lastY=null;
+  for(const it of items){
+    const y = it.transform ? it.transform[5] : null;
+    if(text && lastY!=null && y!=null && Math.abs(y-lastY)>2) text+='\n';
+    else if(text && !text.endsWith('\n')) text+=' ';
+    text+=it.str;
+    if(y!=null) lastY=y;
+  }
+  return text.replace(/[ \t]+/g,' ').replace(/ *\n */g,'\n').trim();
+}
+async function extractPdfPages(file, onProgress){
+  await ensureOcrEngines();
+  const buf=await file.arrayBuffer();
+  const pdf=await window.pdfjsLib.getDocument({data:buf}).promise;
+  const pages=[];
+  const baseName=file.name.replace(/\.pdf$/i,'');
+  for(let i=1;i<=pdf.numPages;i++){
+    if(onProgress) onProgress(i,pdf.numPages,null);
+    const page=await pdf.getPage(i);
+    const textContent=await page.getTextContent();
+    let text=buildTextWithLineBreaks(textContent.items);
+    let engine='pdf-text';
+    const viewport=page.getViewport({scale:2});
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.ceil(viewport.width); canvas.height=Math.ceil(viewport.height);
+    await page.render({canvasContext:canvas.getContext('2d'), viewport}).promise;
+    if(text.length<8){
+      text=await ocrImage(canvas, pct=>onProgress&&onProgress(i,pdf.numPages,pct));
+      engine='ocr';
+    }
+    const blob=await new Promise(res=>canvas.toBlob(res,'image/png'));
+    pages.push({ text, engine, blob, fileName:`${baseName}-עמוד-${i}.png` });
+  }
+  return pages;
+}
+
+function parseReceiptFields(text){
+  const norm=(text||'').replace(/[‎‏]/g,'');
+  const lines=norm.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const out=emptyParsed();
+
+  const amountKeywordRe=/(סה"?כ|סך הכל|לתשלום|total due|grand total|amount due|total)/i;
+  const numRe=/\d{1,3}(?:[,\s]\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?/g;
+  let keywordBest=null;
+  for(const line of lines){
+    if(amountKeywordRe.test(line)){
+      const nums=(line.match(numRe)||[]).map(s=>parseFloat(s.replace(/[,\s]/g,''))).filter(n=>n>0 && n<10000000);
+      if(nums.length) keywordBest = keywordBest==null ? Math.max(...nums) : Math.max(keywordBest, Math.max(...nums));
+    }
+  }
+  if(keywordBest!=null){ out.amount={value:round2(keywordBest), confidence:'high'}; }
+  else{
+    const allNums=(norm.match(numRe)||[]).map(s=>parseFloat(s.replace(/[,\s]/g,''))).filter(n=>n>0 && n<10000000);
+    if(allNums.length){ out.amount={value:round2(Math.max(...allNums)), confidence:'low'}; }
+  }
+
+  const iso=parseDateFromText(norm);
+  if(iso) out.date={value:iso, confidence:'high'};
+
+  const skipLineRe=/^[\d\s.,:%\/\-]+$/;
+  const vendorLine=lines.find(l=>l.length>=2 && l.length<=45 && !skipLineRe.test(l) && !amountKeywordRe.test(l));
+  if(vendorLine) out.vendor={value:vendorLine, confidence:'medium'};
+
+  return out;
+}
+function parseDateFromText(norm){
+  let m=norm.match(/\b(\d{4})[.\/\-](\d{1,2})[.\/\-](\d{1,2})\b/);
+  if(m) return isoOrNull(m[1],m[2],m[3]);
+  m=norm.match(/\b(\d{1,2})[.\/\-](\d{1,2})[.\/\-](\d{2,4})\b/);
+  if(m){ let y=m[3]; if(y.length===2) y=(parseInt(y,10)>50?'19':'20')+y; return isoOrNull(y,m[2],m[1]); }
+  return null;
+}
+function isoOrNull(y,mo,d){
+  y=parseInt(y,10); mo=parseInt(mo,10); d=parseInt(d,10);
+  if(!(mo>=1&&mo<=12&&d>=1&&d<=31)) return null;
+  const nowY=new Date().getFullYear();
+  if(y<1990||y>nowY+1) return null;
+  return `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+/* ============================= SCAN FLOW (single receipt) ============================= */
+function renderScanView(){
+  if(!state.scan) return renderScanUpload();
+  if(state.scan.status==='extracting') return renderScanProgress();
+  if(state.scan.status==='review') return renderScanReview();
+  return renderScanUpload();
+}
+function renderScanUpload(){
+  return `<div class="panel">
+    <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" data-action="nav-dashboard" aria-label="חזרה ללוח הבקרה">→ חזרה</button><h2>סריקת קבלה</h2></div></div>
+    <p style="padding:0 18px;color:var(--ink-soft);font-size:12.5px;">העלו תמונה או PDF של קבלה. ננסה לזהות אוטומטית את הסכום, התאריך והספק/לקוח, ותוכלו לתקן הכל ולאשר לפני שהתנועה נשמרת. קובץ PDF מרובה עמודים יועבר אוטומטית לייבוא קבוצתי (עמוד = קבלה).</p>
+    <label class="upload-zone" id="scanDropzone">
+      <div class="uz-icon" aria-hidden="true">📷</div>
+      <div class="dz-empty-title">גררו לכאן קבלה, או לחצו לבחירה</div>
+      <div class="dz-empty-sub">תמונה (JPG/PNG) או PDF</div>
+      <input type="file" id="scanFileInput" class="sr-file-input" accept="image/*,application/pdf" aria-label="בחירת קובץ קבלה לסריקה">
+    </label>
+  </div>`;
+}
+function renderScanProgress(){
+  return `<div class="panel"><div class="detail-head"><div class="detail-title"><h2>קורא את הקבלה…</h2></div></div>
+    <div style="padding:30px 18px;">
+      <div class="progress-wrap"><div class="progress-track"><div class="progress-fill indet"></div></div></div>
+      <p class="progress-text" role="status" aria-live="polite">${esc(state.scan.progressText||'')}</p>
+    </div></div>`;
+}
+function renderScanReview(){
+  const s=state.scan;
+  return `<div class="panel">
+    <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" type="button" data-action="scan-cancel" aria-label="ביטול וחזרה ללוח הבקרה">→ ביטול</button><h2>בדיקת קבלה לפני שמירה</h2></div></div>
+    ${s.note?`<div class="banner-warn" role="status">${esc(s.note)}</div>`:''}
+    <form id="scanForm" class="review-grid">
+      <div class="review-preview">
+        ${s.previewSrc?`<img src="${s.previewSrc}" alt="תצוגה מקדימה של הקבלה שנסרקה">`:`<div class="empty-state" style="padding:26px 10px;"><div class="es-icon" aria-hidden="true">📄</div><p>${esc(s.receiptFileName||'')}</p></div>`}
+      </div>
+      <div class="review-fields">
+        ${renderExtractFields('scan', s.form, s.parsed)}
+        <details class="raw-text-box">
+          <summary>הצג טקסט גולמי שזוהה בקבלה</summary>
+          <textarea readonly aria-label="טקסט גולמי שזוהה בקבלה">${esc(s.rawText||'(לא זוהה טקסט)')}</textarea>
+        </details>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">✓ אישור ויצירת תנועה</button>
+          <button type="button" class="btn btn-ghost" data-action="scan-cancel">ביטול</button>
+        </div>
+      </div>
+    </form>
+  </div>`;
+}
+
+async function handleScanFile(file){
+  state.scan={ status:'extracting', file, previewSrc:null, progressText:'מתחיל…', note:null, rawText:'', parsed:emptyParsed(), receiptBlob:null, receiptFileName:file.name, form:null };
+  state.view='scan';
+  render(); focusRegion();
+  if(location.protocol==='file:'){
+    applyScanExtraction({ text:'', engine:null, blob:file, fileName:file.name, note:FILE_PROTOCOL_NOTE });
+    return;
+  }
+  try{
+    if(file.type==='application/pdf'){
+      const pages=await extractPdfPages(file, (cur,total,pct)=>{
+        if(!state.scan) return;
+        state.scan.progressText = pct!=null ? `קורא עמוד ${cur} מתוך ${total}… ${pct}%` : `מעבד עמוד ${cur} מתוך ${total}…`;
+        render();
+      });
+      if(!state.scan) return;
+      if(pages.length>1){ startBatchFromPages(pages, `קובץ ה-PDF שהעליתם מכיל ${pages.length} עמודים — כל עמוד מוצג כקבלה נפרדת לאישור.`); return; }
+      applyScanExtraction({ ...pages[0], note:null });
+    } else if(file.type.startsWith('image/')){
+      const text=await ocrImage(file, pct=>{ if(!state.scan) return; state.scan.progressText=`קורא את הקבלה… ${pct}%`; render(); });
+      if(!state.scan) return;
+      applyScanExtraction({ text, engine:'ocr', blob:file, fileName:file.name, note:null });
+    } else {
+      applyScanExtraction({ text:'', engine:null, blob:file, fileName:file.name, note:'סוג קובץ לא נתמך לזיהוי אוטומטי (נתמכים: תמונה או PDF). ניתן להזין את הפרטים ידנית והקובץ עדיין יצורף כקבלה.' });
+    }
+  }catch(err){
+    if(!state.scan) return;
+    applyScanExtraction({ text:'', engine:null, blob:file, fileName:file.name, note:'שגיאה בזיהוי האוטומטי ('+((err&&err.message)||'לא ידועה')+'). ניתן להזין את הפרטים ידנית והקובץ עדיין יצורף כקבלה.' });
+  }
+}
+function applyScanExtraction({text,engine,blob,fileName,note}){
+  const parsed = text ? parseReceiptFields(text) : emptyParsed();
+  const previewSrc = blob && blob.type && blob.type.startsWith('image/') ? URL.createObjectURL(blob) : null;
+  const matched = findMatchingContact(parsed.vendor.value);
+  state.scan={
+    status:'review', file:state.scan?state.scan.file:null, previewSrc, rawText:text||'', engine, note,
+    parsed, receiptBlob:blob, receiptFileName:fileName,
+    form:{
+      contactSel: matched?matched.id:'__new__',
+      newContactName: parsed.vendor.value||'',
+      newContactType:'supplier',
+      type:'expense',
+      amount: parsed.amount.value!=null?String(parsed.amount.value):'',
+      date: parsed.date.value||todayISO(),
+      description: parsed.vendor.value||''
+    }
+  };
+  render(); focusRegion();
+}
+async function confirmScan(){
+  const s=state.scan; if(!s||s.status!=='review') return;
+  const f=s.form;
+  const amount=parseFloat(f.amount);
+  if(!amount||amount<=0||!f.date){ alert('נא למלא סכום ותאריך תקינים.'); return; }
+  let contactId=f.contactSel;
+  if(contactId==='__new__'){
+    const name=f.newContactName.trim();
+    if(!name){ alert('נא להזין שם ספק/לקוח.'); return; }
+    const c={ id:uid(), name, type:f.newContactType||'supplier', phone:'', notes:'', createdAt:Date.now() };
+    await dbPut('contacts',c); state.contacts.push(c); contactId=c.id;
+  }
+  const t={ id:uid(), contactId, type:f.type, amount, date:f.date, description:f.description.trim(), receiptId:null, createdAt:Date.now() };
+  t.receiptId=await storeReceiptBlob(s.receiptBlob, s.receiptFileName||'קבלה', t.id, s.rawText);
+  await dbPut('transactions',t); state.transactions.push(t);
+  if(s.previewSrc) URL.revokeObjectURL(s.previewSrc);
+  state.scan=null; state.view='contact'; state.contactId=contactId;
+  render(); focusRegion();
+}
+function cancelScan(){
+  if(state.scan && state.scan.previewSrc) URL.revokeObjectURL(state.scan.previewSrc);
+  state.scan=null; state.view='dashboard'; render();
+}
+
+/* ============================= BATCH FLOW (many receipts in one file) ============================= */
+function renderBatchView(){
+  if(!state.batch) return renderBatchUpload();
+  if(state.batch.status==='split-setup') return renderBatchSplitSetup();
+  if(state.batch.status==='extracting') return renderBatchProgress();
+  if(state.batch.status==='review') return renderBatchReview();
+  if(state.batch.status==='done') return renderBatchDone();
+  return renderBatchUpload();
+}
+function renderBatchUpload(){
+  const note=state.batch && state.batch.note;
+  return `<div class="panel">
+    <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" data-action="nav-dashboard" aria-label="חזרה ללוח הבקרה">→ חזרה</button><h2>ייבוא קבלות מרובות</h2></div></div>
+    <p style="padding:0 18px;color:var(--ink-soft);font-size:12.5px;line-height:1.7;">
+      העלו קובץ PDF מרובה עמודים — כל עמוד יטופל כקבלה נפרדת, או תמונה אחת שצולמו בה כמה קבלות בשורה אחת או בטור אחד — נחלק אותה לקבלות נפרדות באופן שוויוני ותוכלו לאשר כל אחת.
+    </p>
+    ${note?`<div class="banner-warn" role="status">${esc(note)}</div>`:''}
+    <label class="upload-zone" id="batchDropzone">
+      <div class="uz-icon" aria-hidden="true">📚</div>
+      <div class="dz-empty-title">גררו לכאן קובץ PDF או תמונה, או לחצו לבחירה</div>
+      <input type="file" id="batchFileInput" class="sr-file-input" accept="application/pdf,image/*" aria-label="בחירת קובץ לייבוא קבוצתי">
+    </label>
+  </div>`;
+}
+function renderBatchSplitSetup(){
+  const b=state.batch;
+  return `<div class="panel">
+    <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" type="button" data-action="batch-cancel" aria-label="ביטול ייבוא קבוצתי">→ ביטול</button><h2>חלוקת התמונה לקבלות</h2></div></div>
+    <p style="padding:0 18px 4px;color:var(--ink-soft);font-size:12.5px;line-height:1.7;">
+      אם צילמתם כמה קבלות בתמונה אחת, מונחות זו לצד זו בשורה, או זו מתחת לזו בטור — ציינו כמה קבלות יש בתמונה וכיצד הן מסודרות, ונחלק את התמונה לחלקים שווים לבדיקה. אם יש רק קבלה אחת בתמונה, השאירו על 1.
+    </p>
+    <form id="splitForm" class="form-panel" style="border-top:1px solid var(--paper-line);">
+      <div class="form-grid" style="grid-template-columns:1fr 1fr;max-width:420px;">
+        <div class="field"><label for="splitCount">כמה קבלות בתמונה?</label><input id="splitCount" type="number" min="1" max="20" value="${b.splitCount}" data-split="count"></div>
+        <div class="field"><label for="splitOrientation">איך הן מסודרות?</label>
+          <select id="splitOrientation" data-split="orientation">
+            <option value="row" ${b.splitOrientation==='row'?'selected':''}>זו לצד זו (שורה)</option>
+            <option value="col" ${b.splitOrientation==='col'?'selected':''}>זו מתחת לזו (טור)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-actions"><button type="submit" class="btn btn-primary btn-sm">בצע חלוקה והמשך</button></div>
+    </form>
+  </div>`;
+}
+function renderBatchProgress(){
+  return `<div class="panel"><div class="detail-head"><div class="detail-title"><h2>מעבד קבלות…</h2></div></div>
+    <div style="padding:30px 18px;">
+      <div class="progress-wrap"><div class="progress-track"><div class="progress-fill indet"></div></div></div>
+      <p class="progress-text" role="status" aria-live="polite">${esc(state.batch.progressText||'')}</p>
+    </div></div>`;
+}
+function renderBatchReview(){
+  const b=state.batch, item=b.queue[b.index], total=b.queue.length;
+  return `<div class="panel">
+    <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" type="button" data-action="batch-cancel" aria-label="ביטול ייבוא קבוצתי">→ ביטול</button><h2>בדיקת קבלה ${b.index+1} מתוך ${total}</h2></div></div>
+    <div class="queue-progress" role="status" aria-live="polite">אושרו: ${b.approvedCount} · דולגו: ${b.skippedCount} · נותרו: ${total-b.index-1}</div>
+    ${b.note?`<div class="banner-warn" role="status">${esc(b.note)}</div>`:''}
+    <form id="batchItemForm" class="review-grid">
+      <div class="review-preview">${item.previewSrc?`<img src="${item.previewSrc}" alt="תצוגה מקדימה של הקבלה">`:`<div class="empty-state" style="padding:26px 10px;"><div class="es-icon" aria-hidden="true">📄</div></div>`}</div>
+      <div class="review-fields">
+        ${renderExtractFields('batch', item.form, item.parsed)}
+        <details class="raw-text-box"><summary>הצג טקסט גולמי שזוהה</summary><textarea readonly aria-label="טקסט גולמי שזוהה בקבלה">${esc(item.rawText||'(לא זוהה טקסט)')}</textarea></details>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">✓ אישור והמשך</button>
+          <button type="button" class="btn btn-ghost" data-action="batch-skip">דלג על קבלה זו</button>
+        </div>
+      </div>
+    </form>
+  </div>`;
+}
+function renderBatchDone(){
+  const b=state.batch;
+  return `<div class="panel"><div class="detail-head"><div class="detail-title"><h2>הייבוא הסתיים</h2></div></div>
+    <div class="empty-state">
+      <div class="es-icon" aria-hidden="true">✅</div>
+      <h3>${b.approvedCount} קבלות נוצרו${b.skippedCount?` · ${b.skippedCount} דולגו`:''}</h3>
+      <p><button class="btn btn-primary btn-sm" data-action="batch-cancel">חזרה ללוח הבקרה</button></p>
+    </div></div>`;
+}
+
+async function handleBatchFile(file){
+  state.batch={ status:'extracting', mode:file.type==='application/pdf'?'pdf':(file.type.startsWith('image/')?'image':'other'), file, progressText:'מתחיל…', queue:[], index:0, approvedCount:0, skippedCount:0, splitCount:2, splitOrientation:'row', note:null };
+  render(); focusRegion();
+  if(location.protocol==='file:'){
+    state.batch.status='idle'; state.batch.note=FILE_PROTOCOL_NOTE; render(); return;
+  }
+  try{
+    if(state.batch.mode==='pdf'){
+      const pages=await extractPdfPages(file, (cur,total,pct)=>{
+        if(!state.batch) return;
+        state.batch.progressText = pct!=null ? `קורא עמוד ${cur} מתוך ${total}… ${pct}%` : `מעבד עמוד ${cur} מתוך ${total}…`;
+        render();
+      });
+      buildBatchQueue(pages);
+    } else if(state.batch.mode==='image'){
+      state.batch.status='split-setup'; render(); focusRegion();
+    } else {
+      state.batch.status='idle'; state.batch.note='סוג קובץ לא נתמך. נא לבחור תמונה או PDF.'; render();
+    }
+  }catch(err){
+    if(!state.batch) return;
+    state.batch.status='idle'; state.batch.note='שגיאה בעיבוד הקובץ: '+((err&&err.message)||'לא ידועה'); render();
+  }
+}
+async function performImageSplit(){
+  const b=state.batch; const file=b.file;
+  const n=Math.max(1,Math.min(20,b.splitCount||1));
+  try{
+    const bitmap=await createImageBitmap(file);
+    const pieces=[];
+    for(let i=0;i<n;i++){
+      let sx,sy,sw,sh;
+      if(b.splitOrientation==='row'){ sw=Math.floor(bitmap.width/n); sh=bitmap.height; sx=i*sw; sy=0; if(i===n-1) sw=bitmap.width-sx; }
+      else { sh=Math.floor(bitmap.height/n); sw=bitmap.width; sy=i*sh; sx=0; if(i===n-1) sh=bitmap.height-sy; }
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,sw); canvas.height=Math.max(1,sh);
+      canvas.getContext('2d').drawImage(bitmap, sx,sy,sw,sh, 0,0, sw,sh);
+      const blob=await new Promise(res=>canvas.toBlob(res,'image/png'));
+      pieces.push({ blob, fileName:`${file.name.replace(/\.[^.]+$/,'')}-חלק-${i+1}.png` });
+    }
+    state.batch.status='extracting'; state.batch.progressText='מתחיל…'; render();
+    const results=[];
+    for(let i=0;i<pieces.length;i++){
+      state.batch.progressText=`קורא קטע ${i+1} מתוך ${pieces.length}…`; render();
+      const text=await ocrImage(pieces[i].blob, pct=>{ if(!state.batch) return; state.batch.progressText=`קורא קטע ${i+1} מתוך ${pieces.length}… ${pct}%`; render(); });
+      results.push({ text, engine:'ocr', blob:pieces[i].blob, fileName:pieces[i].fileName });
+    }
+    buildBatchQueue(results);
+  }catch(err){
+    if(!state.batch) return;
+    state.batch.status='idle'; state.batch.note='שגיאה בפיצול התמונה: '+((err&&err.message)||'לא ידועה'); render();
+  }
+}
+function buildBatchQueue(items){
+  const b=state.batch;
+  b.queue=items.map(it=>{
+    const parsed=it.text?parseReceiptFields(it.text):emptyParsed();
+    const matched=findMatchingContact(parsed.vendor.value);
+    return {
+      blob:it.blob, fileName:it.fileName, rawText:it.text||'', engine:it.engine,
+      previewSrc: it.blob?URL.createObjectURL(it.blob):null,
+      parsed, decision:'pending',
+      form:{
+        contactSel: matched?matched.id:'__new__',
+        newContactName: parsed.vendor.value||'',
+        newContactType:'supplier', type:'expense',
+        amount: parsed.amount.value!=null?String(parsed.amount.value):'',
+        date: parsed.date.value||todayISO(),
+        description: parsed.vendor.value||''
+      }
+    };
+  });
+  b.index=0;
+  if(b.queue.length){ b.status='review'; } else { b.status='idle'; b.note=b.note||'לא נמצאו קבלות בקובץ.'; }
+  render(); focusRegion();
+}
+async function approveBatchItem(){
+  const b=state.batch; const item=b.queue[b.index]; const f=item.form;
+  const amount=parseFloat(f.amount);
+  if(!amount||amount<=0||!f.date){ alert('נא למלא סכום ותאריך תקינים.'); return; }
+  let contactId=f.contactSel;
+  if(contactId==='__new__'){
+    const name=f.newContactName.trim();
+    if(!name){ alert('נא להזין שם ספק/לקוח.'); return; }
+    const c={ id:uid(), name, type:f.newContactType||'supplier', phone:'', notes:'', createdAt:Date.now() };
+    await dbPut('contacts',c); state.contacts.push(c); contactId=c.id;
+  }
+  const t={ id:uid(), contactId, type:f.type, amount, date:f.date, description:f.description.trim(), receiptId:null, createdAt:Date.now() };
+  t.receiptId=await storeReceiptBlob(item.blob, item.fileName, t.id, item.rawText);
+  await dbPut('transactions',t); state.transactions.push(t);
+  item.decision='approved'; b.approvedCount++;
+  advanceBatch();
+}
+async function skipBatchItem(){
+  const b=state.batch; b.queue[b.index].decision='skipped'; b.skippedCount++;
+  advanceBatch();
+}
+function advanceBatch(){
+  const b=state.batch; b.note=null; b.index++;
+  if(b.index>=b.queue.length){ b.status='done'; }
+  render(); focusRegion();
+}
+function cancelBatch(){
+  if(state.batch) state.batch.queue.forEach(q=>{ if(q.previewSrc) URL.revokeObjectURL(q.previewSrc); });
+  state.batch=null; state.view='dashboard'; render();
+}
+function startBatchFromPages(pages, note){
+  if(state.scan && state.scan.previewSrc) URL.revokeObjectURL(state.scan.previewSrc);
+  state.scan=null;
+  state.view='batch';
+  state.batch={ status:'extracting', mode:'pdf', file:null, progressText:'', queue:[], index:0, approvedCount:0, skippedCount:0, splitCount:2, splitOrientation:'row', note };
+  buildBatchQueue(pages);
+}
+
+/* ============================= RECEIPTS / TRANSACTIONS (shared) ============================= */
 async function addContact(form){
   const fd=new FormData(form);
   const name=(fd.get('name')||'').toString().trim();
@@ -430,7 +1052,6 @@ async function addContact(form){
   state.showAddContact=false;
   render();
 }
-
 async function deleteContact(id){
   const c=state.contacts.find(x=>x.id===id);
   if(!c) return;
@@ -442,7 +1063,6 @@ async function deleteContact(id){
   state.transactions=state.transactions.filter(x=>x.contactId!==id);
   render();
 }
-
 async function addTransaction(form){
   if(!state.contactId) return;
   const fd=new FormData(form);
@@ -453,14 +1073,13 @@ async function addTransaction(form){
     date:(fd.get('date')||todayISO()).toString(), description:(fd.get('description')||'').toString().trim(),
     receiptId:null, createdAt:Date.now()
   };
-  if(state.pendingReceiptFile){ t.receiptId=await storeReceipt(state.pendingReceiptFile, t.id); }
+  if(state.pendingReceiptFile){ t.receiptId=await storeReceiptBlob(state.pendingReceiptFile, state.pendingReceiptFile.name, t.id, ''); }
   await dbPut('transactions',t);
   state.transactions.push(t);
   state.showAddTx=false;
   state.pendingReceiptFile=null;
   render();
 }
-
 async function deleteTransaction(id){
   const t=state.transactions.find(x=>x.id===id);
   if(!t) return;
@@ -470,23 +1089,20 @@ async function deleteTransaction(id){
   state.transactions=state.transactions.filter(x=>x.id!==id);
   render();
 }
-
-async function storeReceipt(file, transactionId){
+async function storeReceiptBlob(blob, fileName, transactionId, extractedText){
   const id=uid();
-  await dbPut('receipts',{ id, transactionId, fileName:file.name, mimeType:file.type||'application/octet-stream', blob:file, createdAt:Date.now() });
-  state.receiptsMeta[id]={fileName:file.name,mimeType:file.type||'application/octet-stream'};
+  await dbPut('receipts',{ id, transactionId, fileName:fileName||'קבלה', mimeType:(blob&&blob.type)||'application/octet-stream', blob, extractedText:extractedText||'', createdAt:Date.now() });
+  state.receiptsMeta[id]={ fileName:fileName||'קבלה', mimeType:(blob&&blob.type)||'application/octet-stream' };
   return id;
 }
-
 async function attachReceiptToRow(txId, file){
   const t=state.transactions.find(x=>x.id===txId);
   if(!t || !file) return;
-  const id=await storeReceipt(file, txId);
+  const id=await storeReceiptBlob(file, file.name, txId, '');
   t.receiptId=id;
   await dbPut('transactions',t);
   render();
 }
-
 async function removeReceiptFromTx(txId){
   const t=state.transactions.find(x=>x.id===txId);
   if(!t || !t.receiptId) return;
@@ -496,7 +1112,6 @@ async function removeReceiptFromTx(txId){
   await dbPut('transactions',t);
   render();
 }
-
 async function viewReceipt(receiptId){
   const s=await tx('receipts','readonly');
   const req=s.get(receiptId);
@@ -509,12 +1124,12 @@ async function viewReceipt(receiptId){
   };
 }
 
+/* ============================= BACKUP ============================= */
 function downloadBlob(name,blob){
   const u=URL.createObjectURL(blob), a=document.createElement('a');
   a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(u),1000);
 }
-
 function blobToBase64(blob){
   return new Promise((resolve,reject)=>{
     const r=new FileReader();
@@ -528,15 +1143,13 @@ function base64ToBlob(b64,mime){
   for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
   return new Blob([arr],{type:mime});
 }
-
 async function exportBackup(){
   const receipts=await dbGetAll('receipts');
   const receiptsOut=[];
-  for(const r of receipts){ receiptsOut.push({ id:r.id, transactionId:r.transactionId, fileName:r.fileName, mimeType:r.mimeType, data:await blobToBase64(r.blob) }); }
-  const payload={ app:'pinkas', version:1, exportedAt:new Date().toISOString(), contacts:state.contacts, transactions:state.transactions, receipts:receiptsOut };
+  for(const r of receipts){ receiptsOut.push({ id:r.id, transactionId:r.transactionId, fileName:r.fileName, mimeType:r.mimeType, extractedText:r.extractedText||'', data:await blobToBase64(r.blob) }); }
+  const payload={ app:'pinkas', version:2, exportedAt:new Date().toISOString(), contacts:state.contacts, transactions:state.transactions, receipts:receiptsOut };
   downloadBlob(`פנקס-גיבוי-${todayISO()}.json`, new Blob([JSON.stringify(payload)],{type:'application/json'}));
 }
-
 async function importBackup(file){
   const text=await file.text();
   let data;
@@ -546,9 +1159,125 @@ async function importBackup(file){
   await dbClear('contacts'); await dbClear('transactions'); await dbClear('receipts');
   for(const c of data.contacts) await dbPut('contacts',c);
   for(const t of data.transactions||[]) await dbPut('transactions',t);
-  for(const r of data.receipts||[]) await dbPut('receipts',{ id:r.id, transactionId:r.transactionId, fileName:r.fileName, mimeType:r.mimeType, blob:base64ToBlob(r.data,r.mimeType), createdAt:Date.now() });
-  state.view='dashboard'; state.contactId=null;
+  for(const r of data.receipts||[]) await dbPut('receipts',{ id:r.id, transactionId:r.transactionId, fileName:r.fileName, mimeType:r.mimeType, extractedText:r.extractedText||'', blob:base64ToBlob(r.data,r.mimeType), createdAt:Date.now() });
+  state.view='dashboard'; state.contactId=null; state.scan=null; state.batch=null;
   await loadAll();
+}
+
+/* ============================= REPORTS ============================= */
+const HE_MONTHS=['ינו׳','פבר׳','מרץ','אפר׳','מאי','יוני','יולי','אוג׳','ספט׳','אוק׳','נוב׳','דצמ׳'];
+function periodLabelMonth(k){ const [y,m]=k.split('-'); return `${HE_MONTHS[parseInt(m,10)-1]} ${y}`; }
+function aggregateByPeriod(transactions, keyFn){
+  const map=new Map();
+  for(const t of transactions){
+    const k=keyFn(t);
+    if(!map.has(k)) map.set(k,{income:0,expense:0});
+    const e=map.get(k);
+    if(t.type==='income') e.income+=t.amount; else e.expense+=t.amount;
+  }
+  return [...map.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([period,v])=>({period, income:v.income, expense:v.expense, net:v.income-v.expense}));
+}
+function fmtCompact(n){ const a=Math.abs(n); if(a>=1000) return (n/1000).toFixed(a>=10000?0:1).replace(/\.0$/,'')+'K'; return String(Math.round(n)); }
+
+function renderReports(){
+  const scopeId=state.reportsContactId;
+  const txs = scopeId==='all' ? state.transactions : txForContact(scopeId);
+  const income=txs.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const expense=txs.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const monthly=aggregateByPeriod(txs, t=>t.date.slice(0,7)).map(r=>({...r, periodLabel:periodLabelMonth(r.period)}));
+  const yearly=aggregateByPeriod(txs, t=>t.date.slice(0,4)).map(r=>({...r, periodLabel:r.period}));
+  const contactsSorted=state.contacts.slice().sort((a,b)=>a.name.localeCompare(b.name,'he'));
+
+  return `<div class="panel">
+    <div class="detail-head">
+      <div class="detail-title"><h2>דוחות ומאזנים</h2></div>
+      <div class="field" style="min-width:220px;">
+        <label for="reportsScope" class="visually-hidden">היקף הדוח</label>
+        <select id="reportsScope">
+          <option value="all" ${scopeId==='all'?'selected':''}>כל הספקים והלקוחות</option>
+          ${contactsSorted.map(c=>`<option value="${c.id}" ${scopeId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="summary-row" style="padding:16px 18px 0;">
+      <div class="summary-card c-income"><div class="num">${fmtMoney(income)}</div><div class="lbl">הכנסות (כל הזמנים)</div></div>
+      <div class="summary-card c-expense"><div class="num">${fmtMoney(expense)}</div><div class="lbl">הוצאות (כל הזמנים)</div></div>
+      <div class="summary-card c-net"><div class="num ${income-expense>=0?'pos':'neg'}">${fmtMoney(income-expense)}</div><div class="lbl">מאזן כולל</div></div>
+    </div>
+
+    <div style="padding:8px 18px 20px;">
+      <h3 class="report-section-title">מאזן חודשי</h3>
+      ${monthly.length? renderChartLegend()+renderBarChart(monthly) : '<p class="chart-empty">אין עדיין תנועות בטווח זה.</p>'}
+      ${monthly.length? renderPeriodTable(monthly,'מאזן לפי חודש') : ''}
+    </div>
+    <div style="padding:0 18px 20px;">
+      <h3 class="report-section-title">מאזן שנתי</h3>
+      ${yearly.length? renderChartLegend()+renderBarChart(yearly) : '<p class="chart-empty">אין עדיין תנועות בטווח זה.</p>'}
+      ${yearly.length? renderPeriodTable(yearly,'מאזן לפי שנה') : ''}
+    </div>
+    <div style="padding:0 18px 26px;">
+      <h3 class="report-section-title">מגמת מאזן מצטבר לאורך זמן</h3>
+      ${monthly.length? renderLineChart(monthly) : '<p class="chart-empty">אין עדיין תנועות בטווח זה.</p>'}
+    </div>
+  </div>`;
+}
+function renderChartLegend(){
+  return `<div class="chart-legend">
+    <span class="legend-item"><span class="legend-swatch" style="background:var(--chart-income)" aria-hidden="true"></span>הכנסות</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:var(--chart-expense)" aria-hidden="true"></span>הוצאות</span>
+  </div>`;
+}
+function renderPeriodTable(rows,caption){
+  return `<div class="table-scroll-x"><table class="data-table">
+    <caption class="visually-hidden">${esc(caption)}</caption>
+    <thead><tr><th>תקופה</th><th>הכנסות</th><th>הוצאות</th><th>מאזן</th></tr></thead>
+    <tbody>${rows.slice().reverse().map(r=>`<tr><td>${esc(r.periodLabel)}</td><td class="numeric pos">${fmtMoney(r.income)}</td><td class="numeric neg">${fmtMoney(r.expense)}</td><td class="numeric ${r.net>=0?'pos':'neg'}">${fmtMoney(r.net)}</td></tr>`).join('')}</tbody>
+  </table></div>`;
+}
+function renderBarChart(rows){
+  const width=720, height=220, padL=48, padB=34, padT=14, padR=10;
+  const max=Math.max(1, ...rows.map(r=>Math.max(r.income,r.expense)));
+  const plotW=width-padL-padR, plotH=height-padT-padB;
+  const groupW=plotW/rows.length;
+  const barW=Math.max(6, Math.min(24,(groupW-10)/2));
+  const scaleY=v=>padT+plotH-(v/max)*plotH;
+  const yTicks=[0,0.25,0.5,0.75,1].map(f=>max*f);
+
+  let bars='';
+  rows.forEach((r,i)=>{
+    const cx=padL+i*groupW+groupW/2;
+    const xi=cx-barW-3, xe=cx+3;
+    const yi=scaleY(r.income), ye=scaleY(r.expense);
+    bars+=`<g>
+      <rect x="${xi.toFixed(1)}" y="${yi.toFixed(1)}" width="${barW}" height="${(padT+plotH-yi).toFixed(1)}" rx="3" fill="var(--chart-income)"><title>${esc(r.periodLabel)} — הכנסות: ${fmtMoney(r.income)}</title></rect>
+      <rect x="${xe.toFixed(1)}" y="${ye.toFixed(1)}" width="${barW}" height="${(padT+plotH-ye).toFixed(1)}" rx="3" fill="var(--chart-expense)"><title>${esc(r.periodLabel)} — הוצאות: ${fmtMoney(r.expense)}</title></rect>
+      <text x="${cx.toFixed(1)}" y="${(height-padB+16).toFixed(1)}" text-anchor="middle" class="chart-axis-label">${esc(r.periodLabel)}</text>
+    </g>`;
+  });
+  const gridLines=yTicks.map(v=>{
+    const y=scaleY(v);
+    return `<line x1="${padL}" x2="${width-padR}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" class="chart-grid"/><text x="${padL-6}" y="${(y+3).toFixed(1)}" text-anchor="end" class="chart-axis-label">${fmtCompact(v)}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${width} ${height}" class="chart-svg" role="img" aria-label="תרשים עמודות המשווה הכנסות מול הוצאות בכל תקופה; פירוט מדויק בטבלה שמתחת">${gridLines}${bars}</svg>`;
+}
+function renderLineChart(rows){
+  const width=720, height=180, padL=48, padB=28, padT=14, padR=10;
+  let cum=0;
+  const pts=rows.map(r=>{ cum+=r.net; return {periodLabel:r.periodLabel, cum}; });
+  const maxAbs=Math.max(1, ...pts.map(p=>Math.abs(p.cum)));
+  const plotW=width-padL-padR, plotH=height-padT-padB;
+  const scaleX=i=>padL+(pts.length===1?plotW/2:(i/(pts.length-1))*plotW);
+  const scaleY=v=>padT+plotH/2-(v/maxAbs)*(plotH/2);
+  const path=pts.map((p,i)=>`${i===0?'M':'L'} ${scaleX(i).toFixed(1)} ${scaleY(p.cum).toFixed(1)}`).join(' ');
+  const zeroY=scaleY(0);
+  const dots=pts.map((p,i)=>`<circle cx="${scaleX(i).toFixed(1)}" cy="${scaleY(p.cum).toFixed(1)}" r="3.5" fill="var(--brand)"><title>${esc(p.periodLabel)}: ${fmtMoney(p.cum)}</title></circle>`).join('');
+  const showLabel=(i)=> pts.length<=14 || i%Math.ceil(pts.length/14)===0 || i===pts.length-1;
+  const labels=pts.map((p,i)=> showLabel(i) ? `<text x="${scaleX(i).toFixed(1)}" y="${(height-padB+16).toFixed(1)}" text-anchor="middle" class="chart-axis-label">${esc(p.periodLabel)}</text>` : '').join('');
+  return `<svg viewBox="0 0 ${width} ${height}" class="chart-svg" role="img" aria-label="תרשים קווי המציג את המאזן המצטבר לאורך זמן; פירוט מדויק בטבלה החודשית שלמעלה">
+    <line x1="${padL}" x2="${width-padR}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}" class="chart-grid-zero"/>
+    <path d="${path}" fill="none" stroke="var(--brand)" stroke-width="2"/>
+    ${dots}${labels}
+  </svg>`;
 }
 
 /* ============================= EVENTS ============================= */
@@ -558,8 +1287,14 @@ document.getElementById('app').addEventListener('click', async (e)=>{
   const action=target.dataset.action;
   const id=target.dataset.id;
   if(action==='toggle-add-contact'){ state.showAddContact=!state.showAddContact; render(); }
-  else if(action==='open-contact'){ state.view='contact'; state.contactId=id; state.showAddTx=false; state.pendingReceiptFile=null; render(); }
-  else if(action==='back'){ state.view='dashboard'; state.contactId=null; render(); }
+  else if(action==='open-contact'){ state.view='contact'; state.contactId=id; state.showAddTx=false; state.pendingReceiptFile=null; render(); focusRegion(); }
+  else if(action==='nav-dashboard'){ state.view='dashboard'; state.contactId=null; render(); }
+  else if(action==='nav-reports'){ state.view='reports'; render(); focusRegion(); }
+  else if(action==='open-scan'){ state.view='scan'; state.scan=null; render(); focusRegion(); }
+  else if(action==='open-batch'){ state.view='batch'; state.batch=null; render(); focusRegion(); }
+  else if(action==='scan-cancel'){ cancelScan(); }
+  else if(action==='batch-cancel'){ cancelBatch(); }
+  else if(action==='batch-skip'){ await skipBatchItem(); }
   else if(action==='delete-contact'){ e.stopPropagation(); await deleteContact(id); }
   else if(action==='toggle-add-tx'){ state.showAddTx=!state.showAddTx; state.pendingReceiptFile=null; render(); }
   else if(action==='set-tx-type'){
@@ -567,6 +1302,10 @@ document.getElementById('app').addEventListener('click', async (e)=>{
     const toggle=target.closest('.type-toggle');
     if(toggle){ toggle.querySelectorAll('button').forEach(b=>b.classList.toggle('active', b.dataset.type===state.txType)); }
     else render();
+  }
+  else if(action==='ef-set-type'){
+    const scope=target.dataset.scope; const f=activeExtractForm(scope);
+    if(f){ f.type=target.dataset.type; const toggle=target.closest('.type-toggle'); if(toggle) toggle.querySelectorAll('button').forEach(b=>b.classList.toggle('active', b.dataset.type===f.type)); }
   }
   else if(action==='delete-tx'){ await deleteTransaction(id); }
   else if(action==='view-receipt'){ await viewReceipt(id); }
@@ -576,39 +1315,75 @@ document.getElementById('app').addEventListener('click', async (e)=>{
   else if(action==='trigger-import'){ document.getElementById('importInput').click(); }
 });
 
+document.getElementById('app').addEventListener('keydown', async (e)=>{
+  if(e.key==='Enter' || e.key===' '){
+    const target=e.target.closest('[data-action="view-receipt"]');
+    if(target){ e.preventDefault(); await viewReceipt(target.dataset.id); }
+  }
+});
+
 document.getElementById('app').addEventListener('submit', async (e)=>{
   if(e.target.id==='contactForm'){ e.preventDefault(); await addContact(e.target); }
   else if(e.target.id==='txForm'){ e.preventDefault(); await addTransaction(e.target); }
+  else if(e.target.id==='scanForm'){ e.preventDefault(); await confirmScan(); }
+  else if(e.target.id==='batchItemForm'){ e.preventDefault(); await approveBatchItem(); }
+  else if(e.target.id==='splitForm'){ e.preventDefault(); await performImageSplit(); }
 });
 
 document.getElementById('app').addEventListener('input', (e)=>{
-  if(e.target.id==='searchInput'){ state.search=e.target.value; render(); document.getElementById('searchInput').focus(); document.getElementById('searchInput').setSelectionRange(state.search.length,state.search.length); }
+  if(e.target.id==='searchInput'){
+    state.search=e.target.value; render();
+    const el=document.getElementById('searchInput'); el.focus(); el.setSelectionRange(state.search.length,state.search.length);
+  }
+  else if(e.target.dataset.ef && e.target.tagName!=='SELECT'){
+    const f=activeExtractForm(e.target.dataset.scope);
+    if(f) f[e.target.dataset.ef]=e.target.value;
+  }
+  else if(e.target.dataset.split==='count'){ if(state.batch) state.batch.splitCount=Math.max(1,Math.min(20,parseInt(e.target.value,10)||1)); }
 });
+
 document.getElementById('app').addEventListener('change', async (e)=>{
   if(e.target.id==='sortSelect'){ state.sortBy=e.target.value; render(); }
+  else if(e.target.id==='reportsScope'){ state.reportsContactId=e.target.value; render(); }
+  else if(e.target.dataset.ef && e.target.tagName==='SELECT'){
+    const f=activeExtractForm(e.target.dataset.scope);
+    if(f){ f[e.target.dataset.ef]=e.target.value; render(); }
+  }
+  else if(e.target.dataset.split==='orientation'){ if(state.batch) state.batch.splitOrientation=e.target.value; }
   else if(e.target.id==='newTxFile'){
     state.pendingReceiptFile=e.target.files[0]||null;
     const label=document.getElementById('newTxAttachLabel');
     if(label) label.textContent=state.pendingReceiptFile?state.pendingReceiptFile.name:'צירוף קבלה (אופציונלי)';
   }
   else if(e.target.dataset.rowFile){ const txId=e.target.dataset.rowFile; const file=e.target.files[0]; if(file) await attachReceiptToRow(txId,file); }
+  else if(e.target.id==='scanFileInput'){ const file=e.target.files[0]; if(file) await handleScanFile(file); }
+  else if(e.target.id==='batchFileInput'){ const file=e.target.files[0]; if(file) await handleBatchFile(file); }
 });
 
-/* drag & drop onto per-row attach zones */
+/* drag & drop: per-row attach zones + upload zones (scan/batch) */
 document.getElementById('app').addEventListener('dragover',(e)=>{
   const dz=e.target.closest('[data-action="attach-row"]');
-  if(dz){ e.preventDefault(); dz.classList.add('drag-over'); }
+  if(dz){ e.preventDefault(); dz.classList.add('drag-over'); return; }
+  const uz=e.target.closest('.upload-zone');
+  if(uz){ e.preventDefault(); uz.classList.add('drag-over'); }
 });
 document.getElementById('app').addEventListener('dragleave',(e)=>{
   const dz=e.target.closest('[data-action="attach-row"]');
   if(dz) dz.classList.remove('drag-over');
+  const uz=e.target.closest('.upload-zone');
+  if(uz) uz.classList.remove('drag-over');
 });
 document.getElementById('app').addEventListener('drop', async (e)=>{
   const dz=e.target.closest('[data-action="attach-row"]');
-  if(!dz) return;
-  e.preventDefault(); dz.classList.remove('drag-over');
-  const file=e.dataTransfer.files[0];
-  if(file) await attachReceiptToRow(dz.dataset.id,file);
+  if(dz){ e.preventDefault(); dz.classList.remove('drag-over'); const file=e.dataTransfer.files[0]; if(file) await attachReceiptToRow(dz.dataset.id,file); return; }
+  const uz=e.target.closest('.upload-zone');
+  if(uz){
+    e.preventDefault(); uz.classList.remove('drag-over');
+    const file=e.dataTransfer.files[0]; if(!file) return;
+    const input=uz.querySelector('input[type=file]');
+    if(input && input.id==='scanFileInput') await handleScanFile(file);
+    else if(input && input.id==='batchFileInput') await handleBatchFile(file);
+  }
 });
 
 document.getElementById('importInput').addEventListener('change', async (e)=>{
