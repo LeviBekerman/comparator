@@ -285,6 +285,7 @@ const state={
   txType:'income',
   pendingReceiptFile:null,
   reportsContactId:'all',
+  exportMonth:null,
   scan:null,
   batch:null
 };
@@ -1205,6 +1206,8 @@ function renderReports(){
       <div class="summary-card c-net"><div class="num ${income-expense>=0?'pos':'neg'}">${fmtMoney(income-expense)}</div><div class="lbl">מאזן כולל</div></div>
     </div>
 
+    ${renderExportSection(monthly)}
+
     <div style="padding:8px 18px 20px;">
       <h3 class="report-section-title">מאזן חודשי</h3>
       ${monthly.length? renderChartLegend()+renderBarChart(monthly) : '<p class="chart-empty">אין עדיין תנועות בטווח זה.</p>'}
@@ -1233,6 +1236,69 @@ function renderPeriodTable(rows,caption){
     <thead><tr><th>תקופה</th><th>הכנסות</th><th>הוצאות</th><th>מאזן</th></tr></thead>
     <tbody>${rows.slice().reverse().map(r=>`<tr><td>${esc(r.periodLabel)}</td><td class="numeric pos">${fmtMoney(r.income)}</td><td class="numeric neg">${fmtMoney(r.expense)}</td><td class="numeric ${r.net>=0?'pos':'neg'}">${fmtMoney(r.net)}</td></tr>`).join('')}</tbody>
   </table></div>`;
+}
+function renderExportSection(monthly){
+  if(!monthly.length){
+    return `<div class="form-panel" style="margin:0 18px 4px;border:1px solid var(--paper-line);border-radius:var(--radius-md);background:var(--paper);">
+      <h4 style="margin:0;">ייצוא דוח</h4>
+      <p style="color:var(--ink-soft);font-size:12.5px;margin:6px 0 0;">אין עדיין תנועות בטווח הנבחר לייצוא.</p>
+    </div>`;
+  }
+  const periods=monthly.map(r=>r.period);
+  if(!state.exportMonth || !periods.includes(state.exportMonth)) state.exportMonth=periods[periods.length-1];
+  return `<div class="form-panel" style="margin:0 18px 4px;border:1px solid var(--paper-line);border-radius:var(--radius-md);background:var(--paper);">
+    <h4 style="margin:0 0 10px;">ייצוא דוח (Excel/CSV)</h4>
+    <div class="form-actions" style="margin-top:0;align-items:center;">
+      <div class="field" style="min-width:160px;">
+        <label for="exportMonthSelect" class="visually-hidden">חודש לייצוא</label>
+        <select id="exportMonthSelect">
+          ${monthly.slice().reverse().map(r=>`<option value="${r.period}" ${state.exportMonth===r.period?'selected':''}>${esc(r.periodLabel)}</option>`).join('')}
+        </select>
+      </div>
+      <button type="button" class="btn btn-primary btn-sm" data-action="export-month-csv">⭳ ייצוא דוח לחודש שנבחר</button>
+      <button type="button" class="btn btn-sm" data-action="export-all-csv">⭳ ייצוא כל התנועות בטווח</button>
+    </div>
+    <p style="color:var(--ink-soft);font-size:11.5px;margin:10px 0 0;">קובץ CSV נפתח ישירות באקסל/Google Sheets — טבלת תנועות מלאה + שורת סיכום, לפי הספק/לקוח שנבחר למעלה (או הכל).</p>
+  </div>`;
+}
+function csvEscape(v){
+  const s=String(v==null?'':v);
+  return /[",\n\r]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+function isoToDDMMYYYY(iso){ const p=(iso||'').split('-'); return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : (iso||''); }
+function exportTransactionsCsv(txs, filenameBase){
+  const rows=txs.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  const header=['תאריך','שם ספק/לקוח','סוג ספק/לקוח','סוג תנועה','תיאור','סכום','יש קבלה מצורפת'];
+  const lines=[header];
+  let income=0, expense=0;
+  for(const t of rows){
+    const c=state.contacts.find(x=>x.id===t.contactId);
+    if(t.type==='income') income+=t.amount; else expense+=t.amount;
+    lines.push([
+      isoToDDMMYYYY(t.date), c?c.name:'—', c?typeLabel(c.type):'',
+      t.type==='income'?'הכנסה':'הוצאה', t.description||'', t.amount.toFixed(2), t.receiptId?'כן':'לא'
+    ]);
+  }
+  lines.push([]);
+  lines.push(['','','','','סה"כ הכנסות',income.toFixed(2),'']);
+  lines.push(['','','','','סה"כ הוצאות',expense.toFixed(2),'']);
+  lines.push(['','','','','מאזן',(income-expense).toFixed(2),'']);
+  const csv=lines.map(r=>r.map(csvEscape).join(',')).join('\r\n');
+  downloadBlob(`${filenameBase}.csv`, new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'}));
+}
+function exportMonthCsv(){
+  if(!state.exportMonth) return;
+  const scopeId=state.reportsContactId;
+  const base=scopeId==='all' ? state.transactions : txForContact(scopeId);
+  const txs=base.filter(t=>t.date.slice(0,7)===state.exportMonth);
+  const scopeLabel=scopeId==='all' ? 'כל-הלקוחות' : (state.contacts.find(c=>c.id===scopeId)?.name||'לקוח');
+  exportTransactionsCsv(txs, `דוח-חודשי-${state.exportMonth}-${scopeLabel}`);
+}
+function exportAllCsv(){
+  const scopeId=state.reportsContactId;
+  const txs=scopeId==='all' ? state.transactions : txForContact(scopeId);
+  const scopeLabel=scopeId==='all' ? 'כל-הלקוחות' : (state.contacts.find(c=>c.id===scopeId)?.name||'לקוח');
+  exportTransactionsCsv(txs, `דוח-מלא-${scopeLabel}-${todayISO()}`);
 }
 function renderBarChart(rows){
   const width=720, height=220, padL=48, padB=34, padT=14, padR=10;
@@ -1312,6 +1378,8 @@ document.getElementById('app').addEventListener('click', async (e)=>{
   else if(action==='remove-receipt'){ await removeReceiptFromTx(id); }
   else if(action==='attach-row'){ const inp=target.querySelector('input[type=file]'); if(inp) inp.click(); }
   else if(action==='export-backup'){ await exportBackup(); }
+  else if(action==='export-month-csv'){ exportMonthCsv(); }
+  else if(action==='export-all-csv'){ exportAllCsv(); }
   else if(action==='trigger-import'){ document.getElementById('importInput').click(); }
 });
 
@@ -1345,6 +1413,7 @@ document.getElementById('app').addEventListener('input', (e)=>{
 document.getElementById('app').addEventListener('change', async (e)=>{
   if(e.target.id==='sortSelect'){ state.sortBy=e.target.value; render(); }
   else if(e.target.id==='reportsScope'){ state.reportsContactId=e.target.value; render(); }
+  else if(e.target.id==='exportMonthSelect'){ state.exportMonth=e.target.value; }
   else if(e.target.dataset.ef && e.target.tagName==='SELECT'){
     const f=activeExtractForm(e.target.dataset.scope);
     if(f){ f[e.target.dataset.ef]=e.target.value; render(); }
