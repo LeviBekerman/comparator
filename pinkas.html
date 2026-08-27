@@ -120,6 +120,40 @@
   .summary-card.c-net .num.pos{ color:var(--good); }
   .summary-card.c-net .num.neg{ color:var(--bad); }
 
+  .hero-balance{
+    position:relative; overflow:hidden; border-radius:var(--radius-lg); padding:28px 30px; margin-bottom:14px;
+    background:linear-gradient(120deg, var(--brand) 0%, var(--brand-ink) 55%, var(--coral) 130%);
+    box-shadow:0 18px 40px rgba(18,129,115,.28);
+    color:#fff; display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap;
+  }
+  .hero-balance::before{
+    content:''; position:absolute; inset:-40%; z-index:0; opacity:.5; pointer-events:none;
+    background:
+      radial-gradient(circle at 15% 25%, rgba(255,255,255,.35), transparent 40%),
+      radial-gradient(circle at 85% 75%, rgba(255,122,89,.45), transparent 45%);
+    animation:hero-drift 16s ease-in-out infinite alternate;
+  }
+  @keyframes hero-drift{ 0%{ transform:translate(0,0) scale(1); } 100%{ transform:translate(3%,-4%) scale(1.08); } }
+  @media (prefers-reduced-motion: reduce){ .hero-balance::before{ animation:none; } }
+  .hero-balance .hb-label{ position:relative; font-size:12.5px; font-weight:600; opacity:.85; letter-spacing:.3px; }
+  .hero-balance .hb-num{ position:relative; font-family:var(--font-mono); font-size:40px; font-weight:600; direction:ltr; text-align:right; margin-top:2px; }
+  .hero-balance .hb-side{ position:relative; display:flex; gap:22px; flex-wrap:wrap; }
+  .hero-balance .hb-stat{ text-align:center; }
+  .hero-balance .hb-stat .n{ font-family:var(--font-mono); font-size:17px; font-weight:600; direction:ltr; }
+  .hero-balance .hb-stat .l{ font-size:10.5px; opacity:.8; margin-top:2px; }
+
+  .avatar{
+    display:inline-flex; align-items:center; justify-content:center; flex:none;
+    width:34px; height:34px; border-radius:50%; font-family:var(--font-display); font-weight:400; font-size:14px;
+  }
+  .avatar-sm{ width:26px; height:26px; font-size:11.5px; }
+  .avatar-lg{ width:52px; height:52px; font-size:20px; }
+  .name-cell{ display:flex; align-items:center; gap:10px; }
+
+  .card-enter{ animation:card-enter .35s cubic-bezier(.16,1,.3,1) both; }
+  @keyframes card-enter{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
+  @media (prefers-reduced-motion: reduce){ .card-enter{ animation:none; } }
+
   .toolbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:14px 18px; border-bottom:1px solid var(--paper-line); }
   .search-box{ position:relative; flex:1; min-width:180px; max-width:320px; }
   .search-box input{ width:100%; padding:8px 34px 8px 12px; border:1px solid var(--paper-line); border-radius:20px; font-size:12.5px; background:var(--paper); }
@@ -547,6 +581,48 @@ function round2(n){ return Math.round(n*100)/100; }
 function typeLabel(t){ return t==='supplier'?'ספק':t==='customer'?'לקוח':'ספק ולקוח'; }
 function typeClass(t){ return t==='supplier'?'t-supplier':t==='customer'?'t-customer':'t-both'; }
 
+/* ============================= AVATARS ============================= */
+const AVATAR_PALETTE=[
+  {bg:'#e8ddf8',fg:'#6522c3'}, {bg:'#dde8f8',fg:'#2265c3'}, {bg:'#f8dde8',fg:'#bf2263'},
+  {bg:'#f8efdd',fg:'#8b6518'}, {bg:'#ddf3f8',fg:'#187486'}, {bg:'#e8f8dd',fg:'#3f7915'}
+];
+function avatarPalette(name){
+  const s=String(name||'?');
+  let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0;
+  return AVATAR_PALETTE[h%AVATAR_PALETTE.length];
+}
+function renderAvatar(name,{size=''}={}){
+  const p=avatarPalette(name);
+  const letter=esc(String(name||'?').trim().charAt(0).toUpperCase()||'?');
+  return `<span class="avatar${size?' avatar-'+size:''}" style="background:${p.bg};color:${p.fg};" aria-hidden="true">${letter}</span>`;
+}
+
+/* ============================= COUNT-UP NUMBERS ============================= */
+const countUpCache={};
+function countUpSpan(key, value, {fmt='money'}={}){
+  return `<span data-countup="${value}" data-countup-key="${key}" data-countup-fmt="${fmt}">${fmt==='plain'?Math.round(value):fmtMoney(value)}</span>`;
+}
+function runCountUpAnimations(){
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.querySelectorAll('[data-countup]').forEach(el=>{
+    const key=el.dataset.countupKey||el.dataset.countup;
+    const target=parseFloat(el.dataset.countup);
+    if(isNaN(target)) return;
+    const from=Object.prototype.hasOwnProperty.call(countUpCache,key)?countUpCache[key]:0;
+    countUpCache[key]=target;
+    const format = el.dataset.countupFmt==='plain' ? (v)=>String(Math.round(v)) : fmtMoney;
+    if(reduceMotion || from===target){ el.textContent=format(target); return; }
+    const duration=650, start=performance.now();
+    function step(now){
+      const t=Math.min(1,(now-start)/duration);
+      const eased=1-Math.pow(1-t,3);
+      el.textContent=format(from+(target-from)*eased);
+      if(t<1) requestAnimationFrame(step); else el.textContent=format(target);
+    }
+    requestAnimationFrame(step);
+  });
+}
+
 /* ============================= מספר הקצאה (invoice allocation number) ============================= */
 function allocationThreshold(dateStr){
   if(!dateStr) return 20000;
@@ -602,12 +678,13 @@ function render(){
     else html=renderDashboard();
   }catch(err){
     console.error('render error', err);
-    el.innerHTML = renderNavTabs()+`<div class="panel"><div class="empty-state"><div class="es-icon" aria-hidden="true">⚠</div><h3>אירעה שגיאה בהצגת המסך</h3><p>${esc(err&&err.message||'')}</p><p><button class="btn btn-primary btn-sm" data-action="nav-dashboard">חזרה ללוח הבקרה</button></p></div></div>`;
+    el.innerHTML = renderNavTabs()+`<div class="panel card-enter"><div class="empty-state"><div class="es-icon" aria-hidden="true">⚠</div><h3>אירעה שגיאה בהצגת המסך</h3><p>${esc(err&&err.message||'')}</p><p><button class="btn btn-primary btn-sm" data-action="nav-dashboard">חזרה ללוח הבקרה</button></p></div></div>`;
     return;
   }
   el.innerHTML = renderNavTabs()+html;
   updateLicenseBadge();
   updateFolderBadge();
+  runCountUpAnimations();
 }
 function renderNavTabs(){
   const dashActive = state.view==='dashboard' || state.view==='contact' || state.view==='scan' || state.view==='batch';
@@ -634,13 +711,18 @@ function renderDashboard(){
   else if(state.sortBy==='type') rows.sort((a,b)=>a.c.type.localeCompare(b.c.type));
 
   return `
-    <div class="summary-row">
-      <div class="summary-card c-income"><div class="num">${fmtMoney(t.income)}</div><div class="lbl">סה"כ הכנסות</div></div>
-      <div class="summary-card c-expense"><div class="num">${fmtMoney(t.expense)}</div><div class="lbl">סה"כ הוצאות</div></div>
-      <div class="summary-card c-net"><div class="num ${t.net>=0?'pos':'neg'}">${fmtMoney(t.net)}</div><div class="lbl">מאזן כולל</div></div>
-      <div class="summary-card"><div class="num">${t.contacts}</div><div class="lbl">ספקים ולקוחות</div></div>
+    <div class="hero-balance card-enter">
+      <div>
+        <div class="hb-label">מאזן כולל</div>
+        <div class="hb-num">${countUpSpan('dash-net',t.net)}</div>
+      </div>
+      <div class="hb-side">
+        <div class="hb-stat"><div class="n">${countUpSpan('dash-income',t.income)}</div><div class="l">הכנסות</div></div>
+        <div class="hb-stat"><div class="n">${countUpSpan('dash-expense',t.expense)}</div><div class="l">הוצאות</div></div>
+        <div class="hb-stat"><div class="n">${countUpSpan('dash-contacts',t.contacts,{fmt:'plain'})}</div><div class="l">ספקים ולקוחות</div></div>
+      </div>
     </div>
-    <div class="panel">
+    <div class="panel card-enter">
       ${state.showAddContact ? renderAddContactForm() : ''}
       <div class="toolbar">
         <div class="search-box">
@@ -664,7 +746,7 @@ function renderDashboard(){
         <tbody>
           ${rows.map(({c,b})=>`
             <tr data-action="open-contact" data-id="${c.id}">
-              <td><strong>${esc(c.name)}</strong>${c.phone?`<div style="color:var(--ink-soft);font-size:11px;margin-top:2px">${esc(c.phone)}</div>`:''}</td>
+              <td><div class="name-cell">${renderAvatar(c.name,{size:'sm'})}<div><strong>${esc(c.name)}</strong>${c.phone?`<div style="color:var(--ink-soft);font-size:11px;margin-top:2px">${esc(c.phone)}</div>`:''}</div></div></td>
               <td><span class="type-pill ${typeClass(c.type)}">${typeLabel(c.type)}</span></td>
               <td class="numeric pos">${fmtMoney(b.income)}</td>
               <td class="numeric neg">${fmtMoney(b.expense)}</td>
@@ -728,21 +810,22 @@ function renderContactView(){
   const missingAllocation=rows.filter(t=>needsAllocation(t) && !t.allocationNumber).length;
 
   return `
-    <div class="panel">
+    <div class="panel card-enter">
       <div class="detail-head">
         <div class="detail-title">
           <button class="btn btn-ghost btn-sm" data-action="nav-dashboard" aria-label="חזרה ללוח הבקרה">→ חזרה</button>
+          ${renderAvatar(c.name,{size:'lg'})}
           <h2>${esc(c.name)}</h2>
           <span class="type-pill ${typeClass(c.type)}">${typeLabel(c.type)}</span>
           ${c.businessId?`<span style="font-family:var(--font-mono);font-size:11.5px;color:var(--ink-soft);">עוסק/ח.פ: ${esc(c.businessId)}</span>`:''}
           <button class="btn btn-ghost btn-sm" data-action="edit-contact" data-id="${c.id}" aria-label="עריכת פרטי ${esc(c.name)}">✎ עריכה</button>
         </div>
-        <div class="balance-badge ${netClass}">מאזן: ${fmtMoney(b.net)}</div>
+        <div class="balance-badge ${netClass}">מאזן: ${countUpSpan('contact-net',b.net)}</div>
       </div>
       ${state.editContactId===c.id ? renderEditContactForm(c) : ''}
       <div class="summary-row" style="padding:16px 18px 0;">
-        <div class="summary-card c-income"><div class="num">${fmtMoney(b.income)}</div><div class="lbl">הכנסות מ${esc(c.name)}</div></div>
-        <div class="summary-card c-expense"><div class="num">${fmtMoney(b.expense)}</div><div class="lbl">הוצאות ל${esc(c.name)}</div></div>
+        <div class="summary-card c-income"><div class="num">${countUpSpan('contact-income',b.income)}</div><div class="lbl">הכנסות מ${esc(c.name)}</div></div>
+        <div class="summary-card c-expense"><div class="num">${countUpSpan('contact-expense',b.expense)}</div><div class="lbl">הוצאות ל${esc(c.name)}</div></div>
       </div>
       ${missingAllocation ? `<div class="banner-warn" role="status">⚠ ${missingAllocation} תנועות מעל סף הדיווח המפורט (ראו מדריך רשות המסים) חסרות מספר הקצאה.</div>` : ''}
       <div class="toolbar" style="border-bottom:none;">
@@ -1019,7 +1102,7 @@ function isoOrNull(y,mo,d){
 
 /* ============================= SCAN FLOW (single receipt) ============================= */
 function renderPaywall(featureName){
-  return `<div class="panel">
+  return `<div class="panel card-enter">
     <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" data-action="nav-dashboard" aria-label="חזרה ללוח הבקרה">→ חזרה</button><h2>${esc(featureName)} — תכונת פרו</h2></div></div>
     <div class="empty-state">
       <div class="es-icon" aria-hidden="true">🔒</div>
@@ -1032,7 +1115,7 @@ function renderPaywall(featureName){
 function renderLicenseView(){
   const lic=state.license||{valid:false};
   const maskedKey = lic.key ? lic.key.slice(0,4)+'••••'+lic.key.slice(-4) : '';
-  return `<div class="panel">
+  return `<div class="panel card-enter">
     <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" data-action="nav-dashboard" aria-label="חזרה ללוח הבקרה">→ חזרה</button><h2>ניהול רישיון</h2></div></div>
     <div style="padding:18px;max-width:440px;">
       ${lic.valid ? `
@@ -1055,7 +1138,7 @@ function renderLicenseView(){
 function renderFolderView(){
   const fs=state.folderSync;
   const supported=supportsFileSystemAccess();
-  return `<div class="panel">
+  return `<div class="panel card-enter">
     <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" data-action="nav-dashboard" aria-label="חזרה ללוח הבקרה">→ חזרה</button><h2>תיקיית עבודה</h2></div></div>
     <div style="padding:18px;max-width:520px;line-height:1.7;">
       <p style="color:var(--ink-soft);font-size:12.5px;">
@@ -1091,7 +1174,7 @@ function renderScanView(){
   return renderScanUpload();
 }
 function renderScanUpload(){
-  return `<div class="panel">
+  return `<div class="panel card-enter">
     <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" data-action="nav-dashboard" aria-label="חזרה ללוח הבקרה">→ חזרה</button><h2>סריקת קבלה</h2></div></div>
     <p style="padding:0 18px;color:var(--ink-soft);font-size:12.5px;">העלו תמונה או PDF של קבלה. ננסה לזהות אוטומטית את הסכום, התאריך והספק/לקוח, ותוכלו לתקן הכל ולאשר לפני שהתנועה נשמרת. קובץ PDF מרובה עמודים יועבר אוטומטית לייבוא קבוצתי (עמוד = קבלה).</p>
     <label class="upload-zone" id="scanDropzone">
@@ -1103,7 +1186,7 @@ function renderScanUpload(){
   </div>`;
 }
 function renderScanProgress(){
-  return `<div class="panel"><div class="detail-head"><div class="detail-title"><h2>קורא את הקבלה…</h2></div></div>
+  return `<div class="panel card-enter"><div class="detail-head"><div class="detail-title"><h2>קורא את הקבלה…</h2></div></div>
     <div style="padding:30px 18px;">
       <div class="progress-wrap"><div class="progress-track"><div class="progress-fill indet"></div></div></div>
       <p class="progress-text" role="status" aria-live="polite">${esc(state.scan.progressText||'')}</p>
@@ -1111,7 +1194,7 @@ function renderScanProgress(){
 }
 function renderScanReview(){
   const s=state.scan;
-  return `<div class="panel">
+  return `<div class="panel card-enter">
     <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" type="button" data-action="scan-cancel" aria-label="ביטול וחזרה ללוח הבקרה">→ ביטול</button><h2>בדיקת קבלה לפני שמירה</h2></div></div>
     ${s.note?`<div class="banner-warn" role="status">${esc(s.note)}</div>`:''}
     <form id="scanForm" class="review-grid">
@@ -1221,7 +1304,7 @@ function renderBatchView(){
 }
 function renderBatchUpload(){
   const note=state.batch && state.batch.note;
-  return `<div class="panel">
+  return `<div class="panel card-enter">
     <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" data-action="nav-dashboard" aria-label="חזרה ללוח הבקרה">→ חזרה</button><h2>ייבוא קבלות מרובות</h2></div></div>
     <p style="padding:0 18px;color:var(--ink-soft);font-size:12.5px;line-height:1.7;">
       העלו קובץ PDF מרובה עמודים — כל עמוד יטופל כקבלה נפרדת, או תמונה אחת שצולמו בה כמה קבלות בשורה אחת או בטור אחד — נחלק אותה לקבלות נפרדות באופן שוויוני ותוכלו לאשר כל אחת.
@@ -1236,7 +1319,7 @@ function renderBatchUpload(){
 }
 function renderBatchSplitSetup(){
   const b=state.batch;
-  return `<div class="panel">
+  return `<div class="panel card-enter">
     <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" type="button" data-action="batch-cancel" aria-label="ביטול ייבוא קבוצתי">→ ביטול</button><h2>חלוקת התמונה לקבלות</h2></div></div>
     <p style="padding:0 18px 4px;color:var(--ink-soft);font-size:12.5px;line-height:1.7;">
       אם צילמתם כמה קבלות בתמונה אחת, מונחות זו לצד זו בשורה, או זו מתחת לזו בטור — ציינו כמה קבלות יש בתמונה וכיצד הן מסודרות, ונחלק את התמונה לחלקים שווים לבדיקה. אם יש רק קבלה אחת בתמונה, השאירו על 1.
@@ -1256,7 +1339,7 @@ function renderBatchSplitSetup(){
   </div>`;
 }
 function renderBatchProgress(){
-  return `<div class="panel"><div class="detail-head"><div class="detail-title"><h2>מעבד קבלות…</h2></div></div>
+  return `<div class="panel card-enter"><div class="detail-head"><div class="detail-title"><h2>מעבד קבלות…</h2></div></div>
     <div style="padding:30px 18px;">
       <div class="progress-wrap"><div class="progress-track"><div class="progress-fill indet"></div></div></div>
       <p class="progress-text" role="status" aria-live="polite">${esc(state.batch.progressText||'')}</p>
@@ -1264,7 +1347,7 @@ function renderBatchProgress(){
 }
 function renderBatchReview(){
   const b=state.batch, item=b.queue[b.index], total=b.queue.length;
-  return `<div class="panel">
+  return `<div class="panel card-enter">
     <div class="detail-head"><div class="detail-title"><button class="btn btn-ghost btn-sm" type="button" data-action="batch-cancel" aria-label="ביטול ייבוא קבוצתי">→ ביטול</button><h2>בדיקת קבלה ${b.index+1} מתוך ${total}</h2></div></div>
     <div class="queue-progress" role="status" aria-live="polite">אושרו: ${b.approvedCount} · דולגו: ${b.skippedCount} · נותרו: ${total-b.index-1}</div>
     ${b.note?`<div class="banner-warn" role="status">${esc(b.note)}</div>`:''}
@@ -1283,7 +1366,7 @@ function renderBatchReview(){
 }
 function renderBatchDone(){
   const b=state.batch;
-  return `<div class="panel"><div class="detail-head"><div class="detail-title"><h2>הייבוא הסתיים</h2></div></div>
+  return `<div class="panel card-enter"><div class="detail-head"><div class="detail-title"><h2>הייבוא הסתיים</h2></div></div>
     <div class="empty-state">
       <div class="es-icon" aria-hidden="true">✅</div>
       <h3>${b.approvedCount} קבלות נוצרו${b.skippedCount?` · ${b.skippedCount} דולגו`:''}</h3>
@@ -1615,7 +1698,7 @@ function renderReports(){
   const yearly=aggregateByPeriod(txs, t=>t.date.slice(0,4)).map(r=>({...r, periodLabel:r.period}));
   const contactsSorted=state.contacts.slice().sort((a,b)=>a.name.localeCompare(b.name,'he'));
 
-  return `<div class="panel">
+  return `<div class="panel card-enter">
     <div class="detail-head">
       <div class="detail-title"><h2>דוחות ומאזנים</h2></div>
       <div class="field" style="min-width:220px;">
