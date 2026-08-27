@@ -160,6 +160,10 @@
   .search-box svg{ position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--ink-faint); }
   .spacer{ flex:1; }
   .sort-select{ padding:7px 10px; border:1px solid var(--paper-line); border-radius:var(--radius-sm); background:var(--surface); font-size:12px; }
+  .date-filter-bar{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .date-filter-bar input[type="date"]{ padding:7px 9px; border:1px solid var(--paper-line); border-radius:var(--radius-sm); background:var(--paper); font-size:12px; color:var(--ink); }
+  .date-filter-bar .dfb-sep{ color:var(--ink-faint); font-size:12px; }
+  .date-filter-bar .dfb-label{ font-size:11px; color:var(--ink-soft); font-weight:600; }
 
   .panel{ background:var(--surface); border:1px solid var(--paper-line); border-radius:var(--radius-lg); box-shadow:var(--shadow-md); overflow:hidden; }
 
@@ -568,7 +572,8 @@ const state={
   scan:null,
   batch:null,
   license: loadLicenseState() || { valid:false },
-  folderSync: { connected:false, folderName:null, needsReconnect:false, lastSyncAt:null, status:'idle', error:null }
+  folderSync: { connected:false, folderName:null, needsReconnect:false, lastSyncAt:null, status:'idle', error:null },
+  dateFilter: { from:'', to:'' }
 };
 
 function uid(){ return (crypto.randomUUID? crypto.randomUUID() : 'id-'+Date.now()+'-'+Math.random().toString(16).slice(2)); }
@@ -644,6 +649,30 @@ function totals(){
   const income=state.transactions.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
   const expense=state.transactions.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
   return {income,expense,net:income-expense,contacts:state.contacts.length};
+}
+function hasDateFilter(){ return !!(state.dateFilter.from || state.dateFilter.to); }
+function inDateRange(dateStr){
+  const f=state.dateFilter;
+  if(f.from && dateStr<f.from) return false;
+  if(f.to && dateStr>f.to) return false;
+  return true;
+}
+function sumRows(rows){
+  const income=rows.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const expense=rows.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  return {income,expense,net:income-expense};
+}
+function renderDateFilterBar(){
+  const f=state.dateFilter;
+  return `<div class="date-filter-bar" role="group" aria-label="סינון לפי טווח תאריכים">
+    <span class="dfb-label">טווח תאריכים:</span>
+    <label for="dateFilterFrom" class="visually-hidden">מתאריך</label>
+    <input type="date" id="dateFilterFrom" value="${esc(f.from)}" aria-label="מתאריך">
+    <span class="dfb-sep" aria-hidden="true">–</span>
+    <label for="dateFilterTo" class="visually-hidden">עד תאריך</label>
+    <input type="date" id="dateFilterTo" value="${esc(f.to)}" aria-label="עד תאריך">
+    ${hasDateFilter() ? `<button type="button" class="btn btn-ghost btn-sm" data-action="clear-date-filter">✕ ניקוי סינון</button>` : ''}
+  </div>`;
 }
 function findMatchingContact(name){
   if(!name) return null;
@@ -803,11 +832,13 @@ function renderContactForm({formId,title,cancelAction,contact}){
 function renderContactView(){
   const c=state.contacts.find(x=>x.id===state.contactId);
   if(!c){ state.view='dashboard'; return renderDashboard(); }
-  const b=contactBalance(c.id);
-  const rows=txForContact(c.id).slice().sort((a,b2)=>b2.date.localeCompare(a.date));
+  const allRows=txForContact(c.id).slice().sort((a,b2)=>b2.date.localeCompare(a.date));
+  const filtered=hasDateFilter();
+  const rows=filtered ? allRows.filter(t=>inDateRange(t.date)) : allRows;
+  const b=filtered ? sumRows(rows) : contactBalance(c.id);
   const netClass = b.net>0?'pos':b.net<0?'neg':'zero';
 
-  const missingAllocation=rows.filter(t=>needsAllocation(t) && !t.allocationNumber).length;
+  const missingAllocation=allRows.filter(t=>needsAllocation(t) && !t.allocationNumber).length;
 
   return `
     <div class="panel card-enter">
@@ -820,21 +851,22 @@ function renderContactView(){
           ${c.businessId?`<span style="font-family:var(--font-mono);font-size:11.5px;color:var(--ink-soft);">עוסק/ח.פ: ${esc(c.businessId)}</span>`:''}
           <button class="btn btn-ghost btn-sm" data-action="edit-contact" data-id="${c.id}" aria-label="עריכת פרטי ${esc(c.name)}">✎ עריכה</button>
         </div>
-        <div class="balance-badge ${netClass}">מאזן: ${countUpSpan('contact-net',b.net)}</div>
+        <div class="balance-badge ${netClass}">${filtered?'מאזן לתקופה':'מאזן'}: ${countUpSpan('contact-net',b.net)}</div>
       </div>
       ${state.editContactId===c.id ? renderEditContactForm(c) : ''}
       <div class="summary-row" style="padding:16px 18px 0;">
-        <div class="summary-card c-income"><div class="num">${countUpSpan('contact-income',b.income)}</div><div class="lbl">הכנסות מ${esc(c.name)}</div></div>
-        <div class="summary-card c-expense"><div class="num">${countUpSpan('contact-expense',b.expense)}</div><div class="lbl">הוצאות ל${esc(c.name)}</div></div>
+        <div class="summary-card c-income"><div class="num">${countUpSpan('contact-income',b.income)}</div><div class="lbl">הכנסות מ${esc(c.name)}${filtered?' (בתקופה)':''}</div></div>
+        <div class="summary-card c-expense"><div class="num">${countUpSpan('contact-expense',b.expense)}</div><div class="lbl">הוצאות ל${esc(c.name)}${filtered?' (בתקופה)':''}</div></div>
       </div>
       ${missingAllocation ? `<div class="banner-warn" role="status">⚠ ${missingAllocation} תנועות מעל סף הדיווח המפורט (ראו מדריך רשות המסים) חסרות מספר הקצאה.</div>` : ''}
       <div class="toolbar" style="border-bottom:none;">
+        ${renderDateFilterBar()}
         <div class="spacer"></div>
         <button class="btn btn-sm" data-action="open-scan">📷 סריקת קבלה עבור ${esc(c.name)}</button>
         <button class="btn btn-primary btn-sm" data-action="toggle-add-tx">${state.showAddTx?'✕ ביטול':'+ תנועה ידנית'}</button>
       </div>
       ${state.showAddTx ? renderAddTxForm() : ''}
-      ${rows.length===0 ? `<div class="empty-state"><div class="es-icon" aria-hidden="true">🧾</div><h3>אין עדיין תנועות</h3><p>הוסיפו הכנסה או הוצאה, או סרקו קבלה, כדי להתחיל לעקוב אחרי המאזן.</p></div>` : `
+      ${rows.length===0 ? `<div class="empty-state"><div class="es-icon" aria-hidden="true">🧾</div><h3>${filtered?'אין תנועות בטווח התאריכים שנבחר':'אין עדיין תנועות'}</h3><p>${filtered?'נסו טווח תאריכים אחר, או נקו את הסינון כדי לראות את כל התנועות.':'הוסיפו הכנסה או הוצאה, או סרקו קבלה, כדי להתחיל לעקוב אחרי המאזן.'}</p></div>` : `
       <div class="table-scroll-x">
       <table class="data-table">
         <thead><tr><th>תאריך</th><th>תיאור</th><th>סוג</th><th>סכום</th><th>מס' הקצאה</th><th>קבלה</th><th><span class="visually-hidden">פעולות</span></th></tr></thead>
@@ -1689,9 +1721,15 @@ function aggregateByPeriod(transactions, keyFn){
 }
 function fmtCompact(n){ const a=Math.abs(n); if(a>=1000) return (n/1000).toFixed(a>=10000?0:1).replace(/\.0$/,'')+'K'; return String(Math.round(n)); }
 
+function reportsScopeTxs(){
+  const scopeId=state.reportsContactId;
+  const base = scopeId==='all' ? state.transactions : txForContact(scopeId);
+  return hasDateFilter() ? base.filter(t=>inDateRange(t.date)) : base;
+}
 function renderReports(){
   const scopeId=state.reportsContactId;
-  const txs = scopeId==='all' ? state.transactions : txForContact(scopeId);
+  const filtered=hasDateFilter();
+  const txs = reportsScopeTxs();
   const income=txs.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
   const expense=txs.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
   const monthly=aggregateByPeriod(txs, t=>t.date.slice(0,7)).map(r=>({...r, periodLabel:periodLabelMonth(r.period)}));
@@ -1709,10 +1747,13 @@ function renderReports(){
         </select>
       </div>
     </div>
+    <div class="toolbar" style="border-bottom:none;">
+      ${renderDateFilterBar()}
+    </div>
     <div class="summary-row" style="padding:16px 18px 0;">
-      <div class="summary-card c-income"><div class="num">${fmtMoney(income)}</div><div class="lbl">הכנסות (כל הזמנים)</div></div>
-      <div class="summary-card c-expense"><div class="num">${fmtMoney(expense)}</div><div class="lbl">הוצאות (כל הזמנים)</div></div>
-      <div class="summary-card c-net"><div class="num ${income-expense>=0?'pos':'neg'}">${fmtMoney(income-expense)}</div><div class="lbl">מאזן כולל</div></div>
+      <div class="summary-card c-income"><div class="num">${fmtMoney(income)}</div><div class="lbl">הכנסות${filtered?' (בתקופה)':' (כל הזמנים)'}</div></div>
+      <div class="summary-card c-expense"><div class="num">${fmtMoney(expense)}</div><div class="lbl">הוצאות${filtered?' (בתקופה)':' (כל הזמנים)'}</div></div>
+      <div class="summary-card c-net"><div class="num ${income-expense>=0?'pos':'neg'}">${fmtMoney(income-expense)}</div><div class="lbl">מאזן${filtered?' לתקופה':' כולל'}</div></div>
     </div>
     ${(()=>{ const missing=txs.filter(t=>needsAllocation(t)&&!t.allocationNumber).length; return missing
       ? `<div class="banner-warn" role="status" style="margin:14px 18px 0;">⚠ ${missing} תנועות בטווח זה מעל סף הדיווח המפורט (ראו מדריך רשות המסים) חסרות מספר הקצאה — ניתן להוסיף בכרטיס הספק/לקוח הרלוונטי.</div>`
@@ -1802,14 +1843,13 @@ function exportTransactionsCsv(txs, filenameBase){
 function exportMonthCsv(){
   if(!state.exportMonth) return;
   const scopeId=state.reportsContactId;
-  const base=scopeId==='all' ? state.transactions : txForContact(scopeId);
-  const txs=base.filter(t=>t.date.slice(0,7)===state.exportMonth);
+  const txs=reportsScopeTxs().filter(t=>t.date.slice(0,7)===state.exportMonth);
   const scopeLabel=scopeId==='all' ? 'כל-הלקוחות' : (state.contacts.find(c=>c.id===scopeId)?.name||'לקוח');
   exportTransactionsCsv(txs, `דוח-חודשי-${state.exportMonth}-${scopeLabel}`);
 }
 function exportAllCsv(){
   const scopeId=state.reportsContactId;
-  const txs=scopeId==='all' ? state.transactions : txForContact(scopeId);
+  const txs=reportsScopeTxs();
   const scopeLabel=scopeId==='all' ? 'כל-הלקוחות' : (state.contacts.find(c=>c.id===scopeId)?.name||'לקוח');
   exportTransactionsCsv(txs, `דוח-מלא-${scopeLabel}-${todayISO()}`);
 }
@@ -1904,6 +1944,7 @@ document.getElementById('app').addEventListener('click', async (e)=>{
   else if(action==='export-month-csv'){ exportMonthCsv(); }
   else if(action==='export-all-csv'){ exportAllCsv(); }
   else if(action==='trigger-import'){ document.getElementById('importInput').click(); }
+  else if(action==='clear-date-filter'){ state.dateFilter={from:'',to:''}; render(); }
 });
 
 document.getElementById('app').addEventListener('keydown', async (e)=>{
@@ -1944,6 +1985,8 @@ document.getElementById('app').addEventListener('input', (e)=>{
 document.getElementById('app').addEventListener('change', async (e)=>{
   if(e.target.id==='sortSelect'){ state.sortBy=e.target.value; render(); }
   else if(e.target.id==='reportsScope'){ state.reportsContactId=e.target.value; render(); }
+  else if(e.target.id==='dateFilterFrom'){ state.dateFilter.from=e.target.value; render(); }
+  else if(e.target.id==='dateFilterTo'){ state.dateFilter.to=e.target.value; render(); }
   else if(e.target.id==='exportMonthSelect'){ state.exportMonth=e.target.value; }
   else if(e.target.dataset.ef && e.target.tagName==='SELECT'){
     const f=activeExtractForm(e.target.dataset.scope);
