@@ -1249,7 +1249,15 @@ function renderFolderView(){
         אם התיקייה הזו מסונכרנת עם Google Drive, Dropbox או OneDrive (כלומר יש לכם את תוכנת הסנכרון שלהם מותקנת), תקבלו גיבוי בענן וגישה ממספר מחשבים —
         בלי שום שרת מצדנו, והנתונים נשארים אך ורק בחשבון הענן שלכם.
       </p>
-      ${!supported ? `<div class="banner-warn" role="status">התכונה הזו נתמכת כרגע רק ב-Chrome או Edge (שולחני). בדפדפנים אחרים האפליקציה ממשיכה לעבוד כרגיל, פשוט בלי סנכרון לתיקייה.</div>` : ''}
+      ${!supported ? `<div class="banner-warn" role="status">
+          סנכרון אוטומטי לתיקייה נתמך כרגע רק ב-Chrome או Edge על מחשב שולחני — זו מגבלה של הדפדפן עצמו (בפלאפון, וב-Safari בכל מכשיר, האפשרות הזו פשוט לא קיימת בדפדפן). האפליקציה ממשיכה לעבוד כרגיל, פשוט בלי סנכרון חי.
+          <br><br>
+          <strong>מפלאפון:</strong> אפשר עדיין לגבות את כל המידע לקובץ ולהעביר אותו ידנית ל-Drive/Dropbox/iCloud דרך תפריט השיתוף של המכשיר — ולשחזר ממנו בכל מכשיר אחר.
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary btn-sm" data-action="export-backup">⭳ גיבוי עכשיו</button>
+          <button class="btn btn-sm" data-action="trigger-import">⭱ שחזור מגיבוי</button>
+        </div>` : ''}
       ${fs.error ? `<div class="banner-warn" role="status">שגיאה בשמירה לתיקייה: ${esc(fs.error)}</div>` : ''}
       ${fs.connected ? `
         <div class="banner-warn" style="background:var(--good-soft);border-color:var(--good);color:var(--good);" role="status">
