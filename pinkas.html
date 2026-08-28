@@ -196,8 +196,7 @@
 
   .form-panel{ padding:16px 18px; border-bottom:1px solid var(--paper-line); background:var(--paper); }
   .form-panel h4{ margin:0 0 12px; font-size:12.5px; font-family:var(--font-mono); text-transform:uppercase; letter-spacing:.6px; color:var(--ink-soft); }
-  .form-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; align-items:end; }
-  @media (max-width:800px){ .form-grid{ grid-template-columns:repeat(2,1fr); } }
+  .form-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; align-items:end; }
   .field{ display:flex; flex-direction:column; gap:4px; }
   .field label{ font-size:11px; color:var(--ink-soft); font-weight:600; }
   .field input, .field select, .field textarea{
@@ -210,6 +209,23 @@
   .type-toggle button{ flex:1; padding:8px 10px; border:none; background:var(--surface); font-size:12.5px; font-weight:700; }
   .type-toggle button.active.tt-income{ background:var(--good); color:#fff; }
   .type-toggle button.active.tt-expense{ background:var(--bad); color:#fff; }
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(24,27,46,.55); backdrop-filter:blur(2px);
+    display:flex; align-items:center; justify-content:center; padding:20px; z-index:300;
+    animation:modal-fade .15s ease both;
+  }
+  @keyframes modal-fade{ from{ opacity:0; } to{ opacity:1; } }
+  .modal-panel{
+    background:var(--surface); border-radius:var(--radius-lg); box-shadow:0 24px 60px rgba(24,27,46,.35);
+    max-width:520px; width:100%; max-height:88vh; overflow-y:auto;
+    animation:modal-pop .18s cubic-bezier(.16,1,.3,1) both;
+  }
+  @keyframes modal-pop{ from{ opacity:0; transform:translateY(10px) scale(.98); } to{ opacity:1; transform:translateY(0) scale(1); } }
+  @media (prefers-reduced-motion: reduce){ .modal-overlay, .modal-panel{ animation:none; } }
+  .modal-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:16px 18px; border-bottom:1px solid var(--paper-line); }
+  .modal-head h3{ margin:0; font-family:var(--font-display); font-size:17px; }
+  .modal-body{ padding:18px; }
 
   .detail-head{ display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; padding:16px 18px; border-bottom:1px solid var(--paper-line); }
   .detail-title{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
@@ -284,6 +300,8 @@
     .balance-badge{ font-size:16px; }
     .date-filter-bar{ width:100%; }
     .date-filter-bar .dfg{ flex:1; min-width:130px; }
+    .modal-overlay{ padding:12px; align-items:flex-end; }
+    .modal-panel{ max-height:92vh; width:100%; max-width:100%; }
   }
 </style>
 </head>
@@ -594,7 +612,8 @@ const state={
   batch:null,
   license: loadLicenseState() || { valid:false },
   folderSync: { connected:false, folderName:null, needsReconnect:false, lastSyncAt:null, status:'idle', error:null },
-  dateFilter: { from:'', to:'' }
+  dateFilter: { from:'', to:'' },
+  editAllocTxId: null
 };
 
 function uid(){ return (crypto.randomUUID? crypto.randomUUID() : 'id-'+Date.now()+'-'+Math.random().toString(16).slice(2)); }
@@ -727,10 +746,36 @@ function render(){
     el.innerHTML = renderNavTabs()+`<div class="panel card-enter"><div class="empty-state"><div class="es-icon" aria-hidden="true">⚠</div><h3>אירעה שגיאה בהצגת המסך</h3><p>${esc(err&&err.message||'')}</p><p><button class="btn btn-primary btn-sm" data-action="nav-dashboard">חזרה ללוח הבקרה</button></p></div></div>`;
     return;
   }
-  el.innerHTML = renderNavTabs()+html;
+  el.innerHTML = renderNavTabs()+html+renderActiveModal();
   updateLicenseBadge();
   updateFolderBadge();
   runCountUpAnimations();
+  const modalPanel=document.querySelector('.modal-panel');
+  if(modalPanel){ const firstField=modalPanel.querySelector('input, select, textarea'); if(firstField) firstField.focus(); }
+}
+function renderModal(title, bodyHtml, closeAction){
+  return `<div class="modal-overlay" data-close-action="${closeAction}">
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-head">
+        <h3 id="modalTitle">${esc(title)}</h3>
+        <button type="button" class="btn btn-ghost btn-sm" data-action="${closeAction}" aria-label="סגירה">✕</button>
+      </div>
+      <div class="modal-body">${bodyHtml}</div>
+    </div>
+  </div>`;
+}
+function renderActiveModal(){
+  if(state.showAddContact) return renderAddContactForm();
+  if(state.editContactId){ const c=state.contacts.find(x=>x.id===state.editContactId); if(c) return renderEditContactForm(c); }
+  if(state.showAddTx) return renderAddTxForm();
+  if(state.editAllocTxId){ const t=state.transactions.find(x=>x.id===state.editAllocTxId); if(t) return renderAllocModal(t); }
+  return '';
+}
+function closeActiveModal(){
+  if(state.showAddContact){ state.showAddContact=false; render(); return; }
+  if(state.editContactId){ state.editContactId=null; render(); return; }
+  if(state.showAddTx){ state.showAddTx=false; state.pendingReceiptFile=null; render(); return; }
+  if(state.editAllocTxId){ state.editAllocTxId=null; render(); return; }
 }
 function renderNavTabs(){
   const dashActive = state.view==='dashboard' || state.view==='contact' || state.view==='scan' || state.view==='batch';
@@ -769,7 +814,6 @@ function renderDashboard(){
       </div>
     </div>
     <div class="panel card-enter">
-      ${state.showAddContact ? renderAddContactForm() : ''}
       <div class="toolbar">
         <div class="search-box">
           <label for="searchInput" class="visually-hidden">חיפוש ספקים ולקוחות</label>
@@ -783,7 +827,7 @@ function renderDashboard(){
           <option value="type" ${state.sortBy==='type'?'selected':''}>מיון: סוג</option>
         </select>
         <div class="spacer"></div>
-        <button class="btn btn-primary btn-sm" data-action="toggle-add-contact">${state.showAddContact?'✕ ביטול':'+ ספק/לקוח חדש'}</button>
+        <button class="btn btn-primary btn-sm" data-action="toggle-add-contact">+ ספק/לקוח חדש</button>
       </div>
       ${rows.length===0 ? renderEmptyContacts(q) : `
       <div class="table-scroll-x">
@@ -814,16 +858,14 @@ function renderEmptyContacts(hasSearch){
 }
 
 function renderAddContactForm(){
-  return renderContactForm({ formId:'contactForm', title:'הוספת ספק / לקוח', cancelAction:'toggle-add-contact' });
+  return renderModal('הוספת ספק / לקוח', renderContactForm({ formId:'contactForm', cancelAction:'toggle-add-contact' }), 'toggle-add-contact');
 }
 function renderEditContactForm(c){
-  return renderContactForm({ formId:'editContactForm', title:`עריכת פרטי ${esc(c.name)}`, cancelAction:'cancel-edit-contact', contact:c });
+  return renderModal(`עריכת פרטי ${c.name}`, renderContactForm({ formId:'editContactForm', cancelAction:'cancel-edit-contact', contact:c }), 'cancel-edit-contact');
 }
-function renderContactForm({formId,title,cancelAction,contact}){
+function renderContactForm({formId,cancelAction,contact}){
   const c=contact||{ name:'', type:'customer', phone:'', businessId:'', notes:'' };
-  return `<div class="form-panel">
-    <h4>${title}</h4>
-    <form id="${formId}">
+  return `<form id="${formId}">
       <div class="form-grid">
         <div class="field"><label for="cf-name-${formId}">שם *</label><input id="cf-name-${formId}" type="text" name="name" value="${esc(c.name)}" required autofocus></div>
         <div class="field"><label for="cf-type-${formId}">סוג</label>
@@ -841,8 +883,7 @@ function renderContactForm({formId,title,cancelAction,contact}){
         <button type="submit" class="btn btn-primary btn-sm">שמירה</button>
         <button type="button" class="btn btn-ghost btn-sm" data-action="${cancelAction}">ביטול</button>
       </div>
-    </form>
-  </div>`;
+    </form>`;
 }
 
 /* ============================= CONTACT DETAIL ============================= */
@@ -870,7 +911,6 @@ function renderContactView(){
         </div>
         <div class="balance-badge ${netClass}">${filtered?'מאזן לתקופה':'מאזן'}: ${countUpSpan('contact-net',b.net)}</div>
       </div>
-      ${state.editContactId===c.id ? renderEditContactForm(c) : ''}
       <div class="summary-row" style="padding:16px 18px 0;">
         <div class="summary-card c-income"><div class="num">${countUpSpan('contact-income',b.income)}</div><div class="lbl">הכנסות מ${esc(c.name)}${filtered?' (בתקופה)':''}</div></div>
         <div class="summary-card c-expense"><div class="num">${countUpSpan('contact-expense',b.expense)}</div><div class="lbl">הוצאות ל${esc(c.name)}${filtered?' (בתקופה)':''}</div></div>
@@ -880,10 +920,9 @@ function renderContactView(){
         ${renderDateFilterBar()}
         <div class="spacer"></div>
         <button class="btn btn-sm" data-action="open-scan">📷 סריקת קבלה עבור ${esc(c.name)}</button>
-        <button class="btn btn-primary btn-sm" data-action="toggle-add-tx">${state.showAddTx?'✕ ביטול':'+ תנועה ידנית'}</button>
+        <button class="btn btn-primary btn-sm" data-action="toggle-add-tx">+ תנועה ידנית</button>
       </div>
-      ${state.showAddTx ? renderAddTxForm() : ''}
-      ${rows.length===0 ? `<div class="empty-state"><div class="es-icon" aria-hidden="true">🧾</div><h3>${filtered?'אין תנועות בטווח התאריכים שנבחר':'אין עדיין תנועות'}</h3><p>${filtered?'נסו טווח תאריכים אחר, או נקו את הסינון כדי לראות את כל התנועות.':'הוסיפו הכנסה או הוצאה, או סרקו קבלה, כדי להתחיל לעקוב אחרי המאזן.'}</p></div>` : `
+      ${rows.length===0 ?`<div class="empty-state"><div class="es-icon" aria-hidden="true">🧾</div><h3>${filtered?'אין תנועות בטווח התאריכים שנבחר':'אין עדיין תנועות'}</h3><p>${filtered?'נסו טווח תאריכים אחר, או נקו את הסינון כדי לראות את כל התנועות.':'הוסיפו הכנסה או הוצאה, או סרקו קבלה, כדי להתחיל לעקוב אחרי המאזן.'}</p></div>` : `
       <div class="table-scroll-x">
       <table class="data-table">
         <thead><tr><th>תאריך</th><th>תיאור</th><th>סוג</th><th>סכום</th><th>מס' הקצאה</th><th>קבלה</th><th><span class="visually-hidden">פעולות</span></th></tr></thead>
@@ -896,9 +935,7 @@ function renderContactView(){
 }
 
 function renderAddTxForm(){
-  return `<div class="form-panel">
-    <h4>תנועה חדשה עבור ${esc(state.contacts.find(c=>c.id===state.contactId)?.name||'')}</h4>
-    <form id="txForm">
+  const body = `<form id="txForm">
       <div class="type-toggle" style="margin-bottom:10px;max-width:280px;">
         <button type="button" class="tt-income ${state.txType==='income'?'active':''}" data-action="set-tx-type" data-type="income">↙ הכנסה</button>
         <button type="button" class="tt-expense ${state.txType==='expense'?'active':''}" data-action="set-tx-type" data-type="expense">↗ הוצאה</button>
@@ -918,8 +955,8 @@ function renderAddTxForm(){
           <input type="file" id="newTxFile" class="sr-file-input" aria-label="צירוף קבלה לתנועה">
         </label>
       </div>
-    </form>
-  </div>`;
+    </form>`;
+  return renderModal(`תנועה חדשה עבור ${state.contacts.find(c=>c.id===state.contactId)?.name||''}`, body, 'toggle-add-tx');
 }
 
 function renderTxRow(t){
@@ -1632,12 +1669,23 @@ async function removeReceiptFromTx(txId){
   scheduleFolderSync();
   render();
 }
-async function editAllocationNumber(txId){
-  const t=state.transactions.find(x=>x.id===txId);
-  if(!t) return;
-  const value=prompt('מספר הקצאה עבור תנועה זו (השאירו ריק כדי להסיר):', t.allocationNumber||'');
-  if(value===null) return;
-  t.allocationNumber=value.trim();
+function renderAllocModal(t){
+  const body = `<form id="allocForm">
+      <div class="field"><label for="allocInput">מספר הקצאה</label><input id="allocInput" type="text" name="allocationNumber" value="${esc(t.allocationNumber||'')}" placeholder="השאירו ריק כדי להסיר" autofocus></div>
+      <p style="color:var(--ink-soft);font-size:11.5px;margin:10px 0 0;">תנועה מתאריך ${esc(fmtDate(t.date))} · ${esc(t.description||(t.type==='income'?'הכנסה':'הוצאה'))} · ${t.type==='income'?'+':'-'}${esc(fmtMoney(t.amount))}</p>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary btn-sm">שמירה</button>
+        <button type="button" class="btn btn-ghost btn-sm" data-action="cancel-edit-alloc">ביטול</button>
+      </div>
+    </form>`;
+  return renderModal('מספר הקצאה לתנועה', body, 'cancel-edit-alloc');
+}
+async function saveAllocationNumber(form){
+  const t=state.transactions.find(x=>x.id===state.editAllocTxId);
+  state.editAllocTxId=null;
+  if(!t){ render(); return; }
+  const fd=new FormData(form);
+  t.allocationNumber=(fd.get('allocationNumber')||'').toString().trim();
   await dbPut('transactions',t);
   scheduleFolderSync();
   render();
@@ -1918,6 +1966,7 @@ function renderLineChart(rows){
 
 /* ============================= EVENTS ============================= */
 document.getElementById('app').addEventListener('click', async (e)=>{
+  if(e.target.classList && e.target.classList.contains('modal-overlay')){ closeActiveModal(); return; }
   const target=e.target.closest('[data-action]');
   if(!target) return;
   const action=target.dataset.action;
@@ -1946,7 +1995,8 @@ document.getElementById('app').addEventListener('click', async (e)=>{
   else if(action==='delete-tx'){ await deleteTransaction(id); }
   else if(action==='view-receipt'){ await viewReceipt(id); }
   else if(action==='remove-receipt'){ await removeReceiptFromTx(id); }
-  else if(action==='edit-allocation'){ await editAllocationNumber(id); }
+  else if(action==='edit-allocation'){ state.editAllocTxId=id; render(); }
+  else if(action==='cancel-edit-alloc'){ state.editAllocTxId=null; render(); }
   else if(action==='edit-contact'){ state.editContactId=id; render(); }
   else if(action==='cancel-edit-contact'){ state.editContactId=null; render(); }
   else if(action==='open-license'){ state.view='license'; render(); focusRegion(); }
@@ -1970,11 +2020,15 @@ document.getElementById('app').addEventListener('keydown', async (e)=>{
     if(target){ e.preventDefault(); await viewReceipt(target.dataset.id); }
   }
 });
+document.addEventListener('keydown', (e)=>{
+  if(e.key==='Escape' && document.querySelector('.modal-overlay')) closeActiveModal();
+});
 
 document.getElementById('app').addEventListener('submit', async (e)=>{
   if(e.target.id==='contactForm'){ e.preventDefault(); await addContact(e.target); }
   else if(e.target.id==='editContactForm'){ e.preventDefault(); await updateContact(state.editContactId, e.target); }
   else if(e.target.id==='txForm'){ e.preventDefault(); await addTransaction(e.target); }
+  else if(e.target.id==='allocForm'){ e.preventDefault(); await saveAllocationNumber(e.target); }
   else if(e.target.id==='scanForm'){ e.preventDefault(); await confirmScan(); }
   else if(e.target.id==='batchItemForm'){ e.preventDefault(); await approveBatchItem(); }
   else if(e.target.id==='splitForm'){ e.preventDefault(); await performImageSplit(); }
