@@ -12,7 +12,7 @@
 
 1. פתחו חשבון ב-[gumroad.com](https://gumroad.com) ויצרו מוצר (המחיר/תיאור לבחירתכם).
 2. בהגדרות המוצר, הפעילו **"Generate a unique license key per sale"** — Gumroad ייצר ויישלח מפתח רישיון אוטומטית לכל קונה, בלי שתצטרכו לבנות מנגנון הפצה בעצמכם.
-3. מצאו את ה-**Product ID** (לא ה-permalink!) — הוא מופיע בכתובת ה-API של המוצר, או דרך `GET https://api.gumroad.com/v2/products` עם ה-access token שלכם (בהגדרות > Advanced ביצרתם application ל-API).
+3. זהו — אין צורך ביצירת Application או access token. כל מה שצריך הוא ה-**permalink**, שהוא פשוט הסיומת בכתובת הציבורית של עמוד המוצר שלכם: `gumroad.com/l/<permalink>`.
 
 ## שלב 2: פריסת השרת
 
@@ -24,7 +24,7 @@ wrangler kv namespace create LICENSES     # אופציונלי אך מומלץ -
 ```
 
 עדכנו את `wrangler.toml`:
-- `GUMROAD_PRODUCT_ID` — ה-Product ID משלב 1.
+- `GUMROAD_PRODUCT_PERMALINK` — ה-permalink משלב 1 (כבר ממולא לפנקס עם `yhyhhwe`).
 - אם יצרתם KV namespace — הסירו את ה-`#` משלוש השורות התחתונות והדביקו את ה-`id` שקיבלתם.
 - `ALLOWED_ORIGIN` — כתובת האתר בו יתארח `pinkas.html` (או `*` בזמן בדיקות).
 

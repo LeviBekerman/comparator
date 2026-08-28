@@ -52,7 +52,7 @@ async function handleVerify(request, env, cors) {
   const licenseKey = String(body.key || '').trim();
   const activate = !!body.activate;
   if (!licenseKey) return json({ valid: false, error: 'missing_key' }, 400, cors);
-  if (!env.GUMROAD_PRODUCT_ID) return json({ valid: false, error: 'server_not_configured' }, 500, cors);
+  if (!env.GUMROAD_PRODUCT_PERMALINK) return json({ valid: false, error: 'server_not_configured' }, 500, cors);
 
   const cacheKey = `verify:${licenseKey}`;
 
@@ -62,7 +62,10 @@ async function handleVerify(request, env, cors) {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        product_id: env.GUMROAD_PRODUCT_ID,
+        // The permalink from the product's public URL (gumroad.com/l/<this>) works
+        // directly here - no need to create an OAuth Application just to look up
+        // an internal product_id.
+        product_permalink: env.GUMROAD_PRODUCT_PERMALINK,
         license_key: licenseKey,
         increment_uses_count: activate ? 'true' : 'false',
       }),

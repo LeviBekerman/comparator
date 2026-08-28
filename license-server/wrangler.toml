@@ -3,8 +3,8 @@ main = "worker.js"
 compatibility_date = "2024-11-01"
 
 [vars]
-# Your Gumroad product's ID (not the permalink) - see README.md for how to find it.
-GUMROAD_PRODUCT_ID = "REPLACE_ME"
+# The permalink from your product's public Gumroad URL: gumroad.com/l/<this>.
+GUMROAD_PRODUCT_PERMALINK = "yhyhhwe"
 # Lock this down to your app's real origin once you know it (e.g. "https://yourname.github.io").
 # Leave as "*" while testing locally.
 ALLOWED_ORIGIN = "*"
