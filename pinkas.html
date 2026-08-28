@@ -68,10 +68,10 @@
   .skip-link:focus{ top:8px; }
 
   .masthead{
-    display:flex; align-items:center; justify-content:space-between; gap:20px;
+    display:flex; align-items:center; justify-content:space-between; gap:14px 20px; flex-wrap:wrap;
     padding-bottom:18px; margin-bottom:20px;
   }
-  .masthead-title{ display:flex; align-items:center; gap:14px; }
+  .masthead-title{ display:flex; align-items:center; gap:14px; min-width:0; }
   .masthead h1{ font-family:var(--font-display); font-weight:400; font-size:30px; letter-spacing:.2px; margin:0; color:var(--ink); }
   .masthead .stamp-mark{
     display:inline-flex; align-items:center; justify-content:center;
@@ -81,7 +81,11 @@
     font-family:var(--font-display); font-weight:400; font-size:21px; flex:none;
   }
   .masthead p{ margin:3px 0 0; color:var(--ink-soft); font-size:13px; }
-  .masthead-actions{ display:flex; gap:8px; flex:none; flex-wrap:wrap; justify-content:flex-end; max-width:440px; }
+  .masthead-actions{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; max-width:440px; }
+  @media (max-width:520px){
+    .masthead h1{ font-size:24px; }
+    .masthead-actions{ max-width:100%; width:100%; justify-content:flex-start; }
+  }
 
   .nav-tabs{ display:inline-flex; gap:2px; margin-bottom:20px; background:var(--surface); border:1px solid var(--paper-line); border-radius:999px; padding:4px; box-shadow:var(--shadow-sm); }
   .nav-tab{ position:relative; background:none; border:none; padding:9px 20px; border-radius:999px; font-size:12.5px; font-weight:600; color:var(--ink-soft); }
@@ -160,9 +164,10 @@
   .search-box svg{ position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--ink-faint); }
   .spacer{ flex:1; }
   .sort-select{ padding:7px 10px; border:1px solid var(--paper-line); border-radius:var(--radius-sm); background:var(--surface); font-size:12px; }
-  .date-filter-bar{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-  .date-filter-bar input[type="date"]{ padding:7px 9px; border:1px solid var(--paper-line); border-radius:var(--radius-sm); background:var(--paper); font-size:12px; color:var(--ink); }
-  .date-filter-bar .dfb-sep{ color:var(--ink-faint); font-size:12px; }
+  .date-filter-bar{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .date-filter-bar .dfg{ display:flex; align-items:center; gap:5px; }
+  .date-filter-bar .dfg-label{ font-size:11px; color:var(--ink-soft); font-weight:600; white-space:nowrap; }
+  .date-filter-bar input[type="date"]{ padding:7px 9px; border:1px solid var(--paper-line); border-radius:var(--radius-sm); background:var(--paper); font-size:12px; color:var(--ink); min-width:0; }
   .date-filter-bar .dfb-label{ font-size:11px; color:var(--ink-soft); font-weight:600; }
 
   .panel{ background:var(--surface); border:1px solid var(--paper-line); border-radius:var(--radius-lg); box-shadow:var(--shadow-md); overflow:hidden; }
@@ -264,6 +269,22 @@
 
   .footer-note{ text-align:center; color:var(--ink-soft); font-size:11.5px; margin-top:26px; }
   @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+
+  @media (max-width:640px){
+    #app{ padding:14px 10px 32px; }
+    .masthead h1{ font-size:22px; }
+    .masthead p{ font-size:12px; }
+    .btn{ padding:10px 15px; }
+    .btn-sm{ padding:9px 13px; font-size:12px; }
+    table.data-table th, table.data-table td{ padding:12px 10px; }
+    .hero-balance{ padding:22px 20px; }
+    .hero-balance .hb-num{ font-size:32px; }
+    .hero-balance .hb-side{ gap:16px; }
+    .detail-title h2{ font-size:17px; }
+    .balance-badge{ font-size:16px; }
+    .date-filter-bar{ width:100%; }
+    .date-filter-bar .dfg{ flex:1; min-width:130px; }
+  }
 </style>
 </head>
 <body>
@@ -665,12 +686,8 @@ function sumRows(rows){
 function renderDateFilterBar(){
   const f=state.dateFilter;
   return `<div class="date-filter-bar" role="group" aria-label="סינון לפי טווח תאריכים">
-    <span class="dfb-label">טווח תאריכים:</span>
-    <label for="dateFilterFrom" class="visually-hidden">מתאריך</label>
-    <input type="date" id="dateFilterFrom" value="${esc(f.from)}" aria-label="מתאריך">
-    <span class="dfb-sep" aria-hidden="true">–</span>
-    <label for="dateFilterTo" class="visually-hidden">עד תאריך</label>
-    <input type="date" id="dateFilterTo" value="${esc(f.to)}" aria-label="עד תאריך">
+    <div class="dfg"><label for="dateFilterFrom" class="dfg-label">מתאריך</label><input type="date" id="dateFilterFrom" value="${esc(f.from)}"></div>
+    <div class="dfg"><label for="dateFilterTo" class="dfg-label">עד תאריך</label><input type="date" id="dateFilterTo" value="${esc(f.to)}"></div>
     ${hasDateFilter() ? `<button type="button" class="btn btn-ghost btn-sm" data-action="clear-date-filter">✕ ניקוי סינון</button>` : ''}
   </div>`;
 }
