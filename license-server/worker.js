@@ -84,7 +84,10 @@ async function handleVerify(request, env, cors) {
   }
 
   if (!gumroadResult.success) {
-    return json({ valid: false, error: gumroadResult.message || 'invalid_license' }, 200, cors);
+    // Gumroad's own message field is raw English prose (e.g. "That license does
+    // not exist for the provided product.") - normalize to our own error code
+    // so the app can show its own localized message instead of leaking that text.
+    return json({ valid: false, error: 'invalid_license' }, 200, cors);
   }
 
   const purchase = gumroadResult.purchase || {};
